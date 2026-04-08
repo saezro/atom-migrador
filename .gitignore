@@ -1,12 +1,19 @@
-# Logs de sesiones de migración
-logs/
+# Instalador generado
+*.exe
 
-# Configuración local con credenciales (si contiene datos sensibles)
+# Build artifacts
+app/out/
+app/dist/
+app/node_modules/
+app/resources/extra/rclone.exe
+
+# Logs de migraciones
+logs/
+legacy/logs/
+
+# Configuración local
 envMigracion.json
 
-# rclone binario descargado
-rclone.exe
-
-# Archivos temporales de Windows
+# Temporales de Windows
 Thumbs.db
 desktop.ini

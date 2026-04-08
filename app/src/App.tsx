@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
-import RequirementsPage from './pages/RequirementsPage'
 import AccountsPage from './pages/AccountsPage'
 import MigratePage from './pages/MigratePage'
+import JobsPage from './pages/JobsPage'
 import TitleBar from './components/TitleBar'
 import UpdateBanner from './components/UpdateBanner'
 
-const TABS = ['Requisitos', 'Cuentas', 'Migrar'] as const
+const TABS = ['Cuentas', 'Migrar', 'Cola'] as const
 type Tab = (typeof TABS)[number]
 
 interface UpdateInfo {
@@ -16,14 +16,15 @@ interface UpdateInfo {
 }
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>('Requisitos')
+  const [tab, setTab] = useState<Tab>('Cuentas')
   const [remoteDB, setRemoteDB] = useState('dropbox')
   const [remoteGD, setRemoteGD] = useState('gdrive')
-  const [rcReady, setRcReady] = useState(false)
-  const [accountsReady, setAccountsReady] = useState(false)
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
 
   useEffect(() => {
+    // Detectar rclone en segundo plano (activa la cola si hay jobs pendientes)
+    window.api.rclone.check().catch(() => {})
+
     const timer = setTimeout(() => {
       window.api.updates.check().then((info) => {
         if (info?.hasUpdate) setUpdateInfo(info)
@@ -51,21 +52,23 @@ export default function App() {
       </nav>
 
       <div className="page-content" style={{ overflow: 'auto' }}>
-        {tab === 'Requisitos' && (
-          <RequirementsPage onReady={() => { setRcReady(true); setTab('Cuentas') }} />
-        )}
         {tab === 'Cuentas' && (
           <AccountsPage
             remoteDB={remoteDB}
             remoteGD={remoteGD}
             onRemoteDBChange={setRemoteDB}
             onRemoteGDChange={setRemoteGD}
-            onReady={() => { setAccountsReady(true); setTab('Migrar') }}
+            onReady={() => setTab('Migrar')}
           />
         )}
         {tab === 'Migrar' && (
-          <MigratePage remoteDB={remoteDB} remoteGD={remoteGD} />
+          <MigratePage
+            remoteDB={remoteDB}
+            remoteGD={remoteGD}
+            onJobQueued={() => setTab('Cola')}
+          />
         )}
+        {tab === 'Cola' && <JobsPage />}
       </div>
     </div>
   )

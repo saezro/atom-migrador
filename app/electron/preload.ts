@@ -13,9 +13,24 @@ contextBridge.exposeInMainWorld('api', {
     listRemotes: () => ipcRenderer.invoke('rclone:list-remotes'),
     listFolders: (remote: string, path: string, nsMode?: string, nsId?: string, driveId?: string) =>
       ipcRenderer.invoke('rclone:list-folders', remote, path, nsMode, nsId, driveId),
-    listDrives: (remote: string) => ipcRenderer.invoke('rclone:list-drives', remote),
-    startSync: (config: unknown) => ipcRenderer.invoke('rclone:start-sync', config),
-    stopSync: () => ipcRenderer.invoke('rclone:stop-sync')
+    listDrives: (remote: string) => ipcRenderer.invoke('rclone:list-drives', remote)
+  },
+  jobs: {
+    list: () => ipcRenderer.invoke('jobs:list'),
+    get: (id: string) => ipcRenderer.invoke('jobs:get', id),
+    add: (payload: { name: string; config: unknown }) => ipcRenderer.invoke('jobs:add', payload),
+    remove: (id: string) => ipcRenderer.invoke('jobs:remove', id),
+    reorder: (id: string, dir: -1 | 1) => ipcRenderer.invoke('jobs:reorder', id, dir),
+    clearFinished: () => ipcRenderer.invoke('jobs:clear-finished'),
+    runNow: (id: string) => ipcRenderer.invoke('jobs:run-now', id),
+    stop: () => ipcRenderer.invoke('jobs:stop'),
+    recentLogs: (jobId?: string) => ipcRenderer.invoke('jobs:recent-logs', jobId)
+  },
+  queue: {
+    state: () => ipcRenderer.invoke('queue:state'),
+    setPaused: (paused: boolean) => ipcRenderer.invoke('queue:set-paused', paused),
+    setAutorun: (autorun: boolean) => ipcRenderer.invoke('queue:set-autorun', autorun),
+    processNext: () => ipcRenderer.invoke('queue:process-next')
   },
   dropbox: {
     getTeamNs: (remote: string) => ipcRenderer.invoke('dropbox:team-ns', remote)

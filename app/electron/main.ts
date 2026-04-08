@@ -1,38 +1,46 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron'
 import { join } from 'path'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, openSync, readSync, closeSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { spawn, spawnSync } from 'child_process'
 import * as https from 'https'
-import * as http from 'http'
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-interface SyncConfig {
-  remoteDB: string
-  remoteGD: string
-  carpOrig: string
-  carpDest: string
-  driveId: string
-  driveName: string
-  dryRun: boolean
-  createSubfolder: boolean
-  bandwidth: string
-  transfers: number
-  dbNamespace: 'private' | 'team_space'
-  dbNamespaceId: string
-}
+import {
+  initDB,
+  flushNow,
+  getJobs,
+  getJob,
+  addJob,
+  removeJob,
+  reorderJob,
+  clearFinishedJobs,
+  getQueueAutorun,
+  setQueueAutorun,
+  getRecentLogs,
+  JobConfig
+} from './db'
+import {
+  initQueue,
+  processNext,
+  runJob,
+  stopCurrent,
+  setQueuePaused,
+  isQueuePaused,
+  hasRunningJob,
+  getCurrentJobId,
+  killAllSync
+} from './queue'
 
 // ─── State ────────────────────────────────────────────────────────────────────
 let mainWindow: BrowserWindow | null = null
 let rcPath = ''
-let migrationProc: ReturnType<typeof spawn> | null = null
 let authorizeProc: ReturnType<typeof spawn> | null = null
-let tailInterval: ReturnType<typeof setInterval> | null = null
+let allowClose = false
 
 // Paths
 // Writable user data (persists across updates)
 const USER_DATA = app.getPath('userData')
 const ENV_FILE = join(USER_DATA, 'envMigracion.json')
 const LOGS_DIR = join(USER_DATA, 'logs')
+const DB_FILE = join(USER_DATA, 'migrador.db.json')
 // rclone bundled with installer (read-only resources)
 const BUNDLED_RCLONE = app.isPackaged
   ? join(process.resourcesPath, 'extra', 'rclone.exe')
@@ -94,26 +102,7 @@ function getRemotes(): string[] {
   }
 }
 
-function parseStats(line: string) {
-  const stats: Record<string, string> = {}
-  // ETA
-  const etaM = line.match(/ETA\s+(\S+?)(?:\s*\(|$)/)
-  if (etaM) stats.eta = etaM[1] === '-' ? '...' : etaM[1]
-  // Speed
-  const spdM = line.match(/([\d.]+\s*[KMGT]?i?B\/s)/)
-  if (spdM) stats.speed = spdM[1]
-  // Files transferred
-  const xfrM = line.match(/xfr#(\d+)\/(\d+)/)
-  if (xfrM) stats.files = `${xfrM[1]} / ${xfrM[2]}`
-  // Percentage/progress
-  const pctM = line.match(/([\d.]+\s*[KMGT]?i?B)\s*\/\s*([\d.]+\s*[KMGT]?i?B),\s*(\d+)%/)
-  if (pctM) stats.progress = `${pctM[3]}%  (${pctM[1]})`
-  // Errors
-  const errM = line.match(/,\s*(\d+)\s+error/)
-  if (errM) stats.errors = errM[1]
-
-  if (Object.keys(stats).length > 0) send('migration:stats', stats)
-}
+// ─── Window ───────────────────────────────────────────────────────────────────
 
 // ─── Window ───────────────────────────────────────────────────────────────────
 function createWindow() {
@@ -138,17 +127,66 @@ function createWindow() {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  // ─── Close confirmation while a job is running ───────────────────────────
+  mainWindow.on('close', (e) => {
+    if (allowClose) return
+    if (!hasRunningJob()) return
+    e.preventDefault()
+    if (!mainWindow) return
+    dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      buttons: ['Cancelar', 'Detener migración y salir'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      title: 'Migración en curso',
+      message: '⚠ Hay una migración en curso',
+      detail:
+        'Si cierras la aplicación ahora la migración se interrumpirá y los archivos ' +
+        'que estuvieran transfiriéndose podrían quedar a medio copiar (corruptos).\n\n' +
+        'Para una salida segura: detén la migración primero, espera a que termine y ' +
+        'vuelve a cerrar.\n\n' +
+        '¿Quieres detener la migración y salir igualmente?'
+    }).then((res) => {
+      if (res.response === 1) {
+        allowClose = true
+        try { stopCurrent() } catch { /* ignore */ }
+        // Give the process a moment to die before quitting
+        setTimeout(() => {
+          try { killAllSync() } catch { /* ignore */ }
+          flushNow()
+          mainWindow?.destroy()
+        }, 600)
+      }
+    }).catch(() => { /* ignore */ })
+  })
 }
 
 app.whenReady().then(() => {
+  initDB(DB_FILE)
+  initQueue({
+    rcPath: () => rcPath,
+    logsDir: LOGS_DIR,
+    send
+  })
   createWindow()
+  // Try to resume any pending jobs from a previous run, after rclone is detected
+  setTimeout(() => {
+    if (rcPath) processNext()
+  }, 2500)
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
 
 app.on('window-all-closed', () => {
+  flushNow()
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', () => {
+  flushNow()
 })
 
 // ─── IPC: Window controls ────────────────────────────────────────────────────
@@ -160,7 +198,11 @@ ipcMain.on('window:maximize', () => {
 ipcMain.on('window:close', () => mainWindow?.close())
 
 // ─── IPC: rclone ─────────────────────────────────────────────────────────────
-ipcMain.handle('rclone:check', () => findRclone())
+ipcMain.handle('rclone:check', () => {
+  const r = findRclone()
+  if (r.found) processNext()
+  return r
+})
 
 ipcMain.handle('rclone:install', async () => {
   return new Promise<string>((resolve) => {
@@ -297,94 +339,50 @@ ipcMain.handle('rclone:list-drives', async (_, remote: string) => {
   }
 })
 
-ipcMain.handle('rclone:start-sync', async (_, config: SyncConfig) => {
-  if (!rcPath) return { error: 'rclone no encontrado' }
-  if (migrationProc && !migrationProc.killed) return { error: 'Ya hay una migración en curso' }
-
-  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-  const logDir = join(LOGS_DIR, ts.replace('T', '_'))
-  if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true })
-  const logPath = join(logDir, 'migration.log')
-  const logLines: string[] = []
-
-  let orig = `${config.remoteDB}:${config.carpOrig}`
-  let dest = config.carpDest
-  if (config.createSubfolder) {
-    const srcName = config.carpOrig ? config.carpOrig.split('/').pop()! : config.remoteDB
-    dest = dest ? `${dest}/${srcName}` : srcName
-  }
-  const destFull = `${config.remoteGD}:${dest}`
-
-  const transfers = config.transfers
-  const checkers = transfers * 3
-
-  const args = [
-    'sync', orig, destFull,
-    '--drive-team-drive', config.driveId,
-    '--transfers', String(transfers),
-    '--checkers', String(checkers),
-    '--fast-list',
-    '--retries', '10', '--low-level-retries', '20', '--retries-sleep', '5s',
-    '--ignore-errors',
-    '--size-only', '--no-traverse', '--no-update-modtime',
-    '--drive-chunk-size', '64M', '--drive-upload-cutoff', '64M',
-    '--drive-pacer-min-sleep', '10ms', '--drive-pacer-burst', '100',
-    '--drive-acknowledge-abuse',
-    '--buffer-size', '32M',
-    '--tpslimit', '30', '--tpslimit-burst', '60',
-    '--stats', '3s', '--stats-one-line', '--use-mmap',
-    '--log-level', 'INFO'
-  ]
-  if (config.dbNamespace === 'team_space' && config.dbNamespaceId) {
-    args.push('--dropbox-root-namespace', config.dbNamespaceId)
-  }
-  if (config.bandwidth && config.bandwidth !== '0') {
-    args.push('--bwlimit', config.bandwidth)
-  }
-  if (config.dryRun) args.push('--dry-run')
-
-  send('migration:log', '='.repeat(50))
-  send('migration:log', `  MIGRACIÓN${config.dryRun ? ' [SIMULACIÓN]' : ''}`)
-  send('migration:log', `  Origen:  ${orig}`)
-  send('migration:log', `  Destino: ${destFull}  (${config.driveName})`)
-  send('migration:log', `  Transfers: ${transfers} | Checkers: ${checkers}`)
-  send('migration:log', '='.repeat(50))
-
-  migrationProc = spawn(rcPath, args, {
-    windowsHide: true,
-    stdio: ['ignore', 'pipe', 'pipe']
-  })
-
-  function handleOutput(data: Buffer) {
-    const lines = data.toString('utf8').split(/\r?\n/).filter(l => l.trim())
-    for (const line of lines) {
-      send('migration:log', line)
-      parseStats(line)
-      logLines.push(line)
-    }
-  }
-
-  migrationProc.stdout?.on('data', handleOutput)
-  migrationProc.stderr?.on('data', handleOutput)
-
-  migrationProc.on('close', (code) => {
-    try { writeFileSync(logPath, logLines.join('\n'), 'utf8') } catch { /* ignore */ }
-    send('migration:done', { code, logPath, logDir })
-    migrationProc = null
-  })
-
-  return { ok: true, logDir }
+// ─── IPC: Jobs / Queue ───────────────────────────────────────────────────────
+ipcMain.handle('jobs:list', () => getJobs())
+ipcMain.handle('jobs:get', (_, id: string) => getJob(id))
+ipcMain.handle('jobs:add', (_, payload: { name: string; config: JobConfig }) => {
+  const job = addJob({ name: payload.name, config: payload.config })
+  // Try to start it immediately if queue is idle
+  processNext()
+  return job
 })
-
-ipcMain.handle('rclone:stop-sync', () => {
-  if (migrationProc && !migrationProc.killed) {
-    migrationProc.kill('SIGTERM')
-    setTimeout(() => {
-      try { if (!migrationProc?.killed) migrationProc?.kill('SIGKILL') } catch { /* ignore */ }
-    }, 3000)
-  }
+ipcMain.handle('jobs:remove', (_, id: string) => {
+  // Don't allow removing the currently-running job
+  if (getCurrentJobId() === id) return { ok: false, error: 'Este job está corriendo' }
+  return { ok: removeJob(id) }
+})
+ipcMain.handle('jobs:reorder', (_, id: string, dir: -1 | 1) => {
+  reorderJob(id, dir)
   return { ok: true }
 })
+ipcMain.handle('jobs:clear-finished', () => ({ removed: clearFinishedJobs() }))
+ipcMain.handle('jobs:run-now', (_, id: string) => runJob(id))
+ipcMain.handle('jobs:stop', () => {
+  stopCurrent()
+  return { ok: true }
+})
+ipcMain.handle('queue:state', () => ({
+  paused: isQueuePaused(),
+  autorun: getQueueAutorun(),
+  currentJobId: getCurrentJobId(),
+  hasRunning: hasRunningJob()
+}))
+ipcMain.handle('queue:set-paused', (_, paused: boolean) => {
+  setQueuePaused(paused)
+  return { ok: true }
+})
+ipcMain.handle('queue:set-autorun', (_, autorun: boolean) => {
+  setQueueAutorun(autorun)
+  if (autorun) processNext()
+  return { ok: true }
+})
+ipcMain.handle('queue:process-next', () => {
+  processNext()
+  return { ok: true }
+})
+ipcMain.handle('jobs:recent-logs', (_, jobId?: string) => getRecentLogs(jobId))
 
 // ─── IPC: Dropbox team namespace ─────────────────────────────────────────────
 ipcMain.handle('dropbox:team-ns', async (_, remoteName: string) => {

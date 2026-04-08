@@ -1,6 +1,8 @@
-# Migrador Dropbox → Google Shared Drive
+# Atom Migrador — Dropbox → Google Shared Drive
 
-Herramienta de escritorio (PowerShell + WinForms) para migrar archivos de Dropbox a Google Shared Drives usando **rclone** como motor de transferencia.
+Aplicación de escritorio (Electron + React) para migrar archivos de Dropbox a Google Shared Drives usando **rclone** como motor de transferencia. Incluye cola de trabajos persistente con verificación automática post-copia.
+
+> La versión anterior (PowerShell + WinForms) sigue en el repo como referencia histórica (`Migrar-GUI.ps1`).
 
 ---
 
@@ -8,254 +10,262 @@ Herramienta de escritorio (PowerShell + WinForms) para migrar archivos de Dropbo
 
 | Componente | Notas |
 |---|---|
-| Windows 10/11 | Probado en Win 11 |
-| PowerShell 5.1+ | Incluido en Windows |
-| rclone | Se instala automáticamente desde la app |
+| Windows 10/11 x64 | Probado en Win 11 |
+| Atom Migrador Setup x.y.z.exe | Instalador NSIS — rclone ya va bundled |
+
+rclone se incluye dentro del instalador (`resources/extra/rclone.exe`). No es necesario instalarlo por separado.
 
 ---
 
-## Cómo ejecutar
+## Instalación
+
+Ejecutar `Atom Migrador Setup x.y.z.exe` → Siguiente → Siguiente → Instalar.
+Sin comandos, sin dependencias externas.
+
+---
+
+## Generar el instalador (desarrolladores)
 
 ```bat
-powershell -ExecutionPolicy Bypass -File .\Migrar-GUI.ps1
+cd app
+npm run dist
 ```
 
-O simplemente doble clic en **`Abrir-Migrador.bat`**.
+Resultado: `app/dist/Atom Migrador Setup <version>.exe` (instalador NSIS, ~93 MB, sin firma).
+
+Para publicar en GitHub Releases automáticamente:
+
+```bat
+npm run dist:gh
+```
+
+### Primer build en una máquina nueva
+
+electron-builder descarga `winCodeSign` (herramientas de firma). En Windows sin Developer Mode activado, la extracción falla por falta de privilegio de symlinks (solo afecta a ficheros macOS del paquete, que no se usan). Fix único manual:
+
+```bat
+:: Ejecutar una vez, como administrador o con Developer Mode activo:
+:: Copiar la carpeta temporal extraída al nombre esperado
+xcopy /E /I "%LOCALAPPDATA%\electron-builder\Cache\winCodeSign\<XXXXXXXX>" ^
+      "%LOCALAPPDATA%\electron-builder\Cache\winCodeSign\winCodeSign-2.6.0"
+```
+
+El número `<XXXXXXXX>` es el directorio temporal creado por el intento fallido. Con `npm run dist` ya no vuelve a intentarlo al encontrar `winCodeSign-2.6.0`.
 
 ---
 
-## Estructura de archivos
+## Estructura del proyecto
 
 ```
 Migrador/
-├── Migrar-GUI.ps1          # Aplicación principal
-├── Abrir-Migrador.bat      # Lanzador
-├── envMigracion.json       # Config guardada (auto-generada)
-└── logs_YYYYMMDD_HHMMSS/   # Carpetas de log por sesión (auto-generadas)
-    └── mig_HHmmss.log
+├── app/
+│   ├── electron/
+│   │   ├── main.ts          # Proceso principal Electron
+│   │   ├── preload.ts       # Bridge renderer ↔ main
+│   │   ├── db.ts            # Mini-BD JSON persistente (jobs, logs recientes)
+│   │   └── queue.ts         # Runner de cola secuencial con verificación
+│   ├── src/
+│   │   ├── App.tsx          # Shell con pestañas
+│   │   ├── pages/
+│   │   │   ├── RequirementsPage.tsx
+│   │   │   ├── AccountsPage.tsx
+│   │   │   ├── MigratePage.tsx   # Configurar y encolar trabajos
+│   │   │   └── JobsPage.tsx      # Gestión de cola (nueva)
+│   │   └── components/
+│   │       ├── FolderBrowser.tsx
+│   │       ├── LogViewer.tsx
+│   │       ├── StatCard.tsx
+│   │       ├── TitleBar.tsx
+│   │       └── UpdateBanner.tsx
+│   ├── resources/
+│   │   └── extra/rclone.exe     # rclone bundled (generado por scripts/download-rclone.mjs)
+│   └── package.json
+├── DOCUMENTACION.md
+└── Migrar-GUI.ps1               # Versión legacy PowerShell (referencia histórica)
 ```
+
+---
+
+## Datos persistentes (userData)
+
+Todos los datos de usuario se guardan en `%APPDATA%\atom-migrador\` y sobreviven a actualizaciones del instalador:
+
+| Archivo / carpeta | Contenido |
+|---|---|
+| `migrador.db.json` | Cola de jobs, estado, logs recientes (hasta 2000 líneas), configuración de cola |
+| `envMigracion.json` | Nombres de los remotes de rclone (RemoteDB, RemoteGD) |
+| `logs/<ts>_<jobId>/migration.log` | Log completo por trabajo (sincronización + verificación) |
 
 ---
 
 ## Flujo de uso
 
-### Página 0 — Requisitos
-- Detecta si rclone está instalado.
-- Si no está, lo instala vía `winget` o descarga directa desde `rclone.org`.
-- Muestra la versión detectada.
+### Pestaña 1 — Requisitos
+- Detecta rclone (bundled, PATH, WinGet, `C:\rclone`…).
+- Si no lo encuentra descarga el zip oficial y lo copia a userData.
+- Muestra versión detectada.
 
-### Página 1 — Cuentas
-1. **Conectar Dropbox**: lanza `rclone authorize dropbox` en segundo plano, abre el navegador, espera a que el usuario autorice y guarda el token automáticamente.
-2. **Conectar Google Drive**: ídem con `rclone authorize drive`.
-3. **Verificar conexiones**: comprueba que ambos remotes existen en la config de rclone.
+### Pestaña 2 — Cuentas
+- **Conectar Dropbox**: lanza `rclone authorize dropbox`, abre el navegador, extrae el token del stdout y llama a `rclone config create`.
+- **Conectar Google Drive**: ídem con `rclone authorize drive`.
+- Soporta espacios de nombres Dropbox Business (team namespace).
 
-### Página 2 — Migrar
-- Navegar la estructura de carpetas de Dropbox (origen).
-- Seleccionar una Shared Drive de Google (destino).
-- Configurar subcarpeta de destino, banda ancha y número de transferencias paralelas.
-- Opción de **dry-run** (simulación sin mover nada).
-- Iniciar / Detener migración con log en tiempo real y estadísticas.
+### Pestaña 3 — Migrar *(configurar y encolar)*
+1. Seleccionar carpeta origen en Dropbox (soporte Personal / Equipo).
+2. Seleccionar Shared Drive y carpeta destino en Google Drive.
+3. Configurar opciones: dry-run, crear subcarpeta, banda, transferencias paralelas.
+4. (Opcional) Dar nombre al trabajo.
+5. Pulsar **＋ Añadir a la cola** → la app salta automáticamente a la pestaña Cola.
 
----
+Se pueden añadir tantos trabajos como se quiera antes de que empiece a ejecutarse ninguno.
 
-## Arquitectura interna
+### Pestaña 4 — Cola *(nueva)*
+Gestión completa de la cola de trabajos:
 
-### Estado global `$G`
-```powershell
-$G = @{
-    RemoteDB  = "dropbox"   # nombre del remote rclone para Dropbox
-    RemoteGD  = "gdrive"    # nombre del remote rclone para Google Drive
-    CarpOrig  = ""          # carpeta origen seleccionada en Dropbox
-    DriveID   = ""          # ID de la Shared Drive destino
-    DriveNom  = ""          # nombre display de la Shared Drive
-    Drives    = @()         # lista de Shared Drives disponibles
-    PilaDB    = Stack       # historial de navegación en Dropbox
-    RutaDB    = ""          # ruta actual en el explorador Dropbox
-    Proc      = $null       # proceso rclone sync en curso
-    RcPath    = ""          # ruta al ejecutable rclone
-    LogDir    = "..."       # directorio de logs de esta sesión
-    EnvFile   = "..."       # ruta al JSON de config guardada
-}
-```
-
-### Funciones principales
-
-| Función | Descripción |
+| Elemento | Descripción |
 |---|---|
-| `FindRC` | Busca rclone en PATH, carpeta del script y rutas comunes |
-| `RC` | Wrapper para ejecutar rclone con los args dados |
-| `GetRemotes` | Lista los remotes configurados en rclone |
-| `GetDBFolders` | Lista subcarpetas de una ruta en Dropbox |
-| `GetDrives` | Lista las Shared Drives de la cuenta de Google |
-| `LoadDB` | Carga el explorador de carpetas de Dropbox |
-| `SaveEnv` | Guarda `RemoteDB` y `RemoteGD` en `envMigracion.json` |
-| `LoadEnv` | Carga config guardada al iniciar |
-| `StartOAuth` | Ejecuta el flujo OAuth para Dropbox o Google Drive |
-| `CheckReady` | Habilita el botón de migración cuando hay origen y destino |
-| `UpdStats` | Parsea líneas de log de rclone y actualiza las tarjetas de stats |
-
-### Paleta de colores
-
-| Variable | Color | Uso |
-|---|---|---|
-| `$C0` | `#0C0C10` | Fondo principal |
-| `$C1` | `#14141A` | Paneles |
-| `$C2` | `#1E1E28` | Controles |
-| `$OR` | `#FF8C00` | Naranja principal (acento) |
-| `$GR` | `#3CBE5A` | Verde OK |
-| `$RD` | `#DC4141` | Rojo error |
-| `$AM` | `#DCAF28` | Amber advertencia |
-| `$MT` | `#6E6E82` | Texto secundario |
+| Lista de trabajos | Estado en tiempo real, estadísticas en vivo durante la ejecución |
+| ↑ / ↓ | Reordenar trabajos pendientes |
+| ▶ Ejecutar ya | Forzar ejecución inmediata de un trabajo pendiente (sin esperar su turno) |
+| ↻ Reintentar | Relanzar trabajos con error / interrumpidos / verificación fallida |
+| ✕ Eliminar | Quitar un trabajo de la cola (no aplica al trabajo activo) |
+| ⏸ Pausar cola | Detiene el inicio automático del siguiente trabajo (el actual termina normal) |
+| ■ Detener actual | Para el proceso rclone en curso (SIGTERM → SIGKILL a los 3 s) |
+| 🧹 Limpiar terminados | Elimina de la lista los trabajos finalizados (OK / error / detenidos) |
+| Panel de detalle | Muestra metadatos del trabajo + log en vivo (se recarga al seleccionar) |
 
 ---
 
-## Flujo OAuth (detalle técnico)
+## Verificación post-copia
+
+Tras cada `rclone sync` con código de salida 0 (y cuando **no** es dry-run), la app ejecuta automáticamente:
 
 ```
-Usuario pulsa "Conectar Dropbox"
-    │
-    ├─ Kill rclone headless anteriores (sin ventana)
-    │
-    ├─ Lanza: rclone authorize dropbox
-    │   (redirige stdout + stderr a StringBuilder $buf)
-    │
-    ├─ Timer cada 1 segundo comprueba HasExited
-    │   │
-    │   └─ Proceso terminó?
-    │       ├─ WaitForExit(3000) → asegura que el buffer async esté completo
-    │       ├─ Busca JSON de token en $buf con regex
-    │       │
-    │       ├─ Token encontrado?
-    │       │   ├─ rclone config create <nombre> dropbox token <tok>
-    │       │   └─ Marca como conectado
-    │       │
-    │       └─ Sin token?
-    │           └─ GetRemotes() → ¿ya estaba configurado?
-    │               ├─ Sí → marca conectado
-    │               └─ No → muestra error
-    │
-    └─ Habilita "Ir a Migrar" si ambos remotes están listos
+rclone check ORIGEN DESTINO --size-only --one-way --fast-list
 ```
 
-### Regex de extracción de token
+Esto comprueba que **todos los archivos del origen existen en el destino con el mismo tamaño** (no verifica hashes, pero es rápido y sin descargas). El resultado aparece en el badge del trabajo:
 
-```
-(?s)(\{"access_token".+?"expiry"\s*:\s*"[^"]+"\})   # formato completo
-(?s)(\{[^{}]*"access_token"[^{}]*\})                  # formato simplificado
-```
+| Badge | Significado |
+|---|---|
+| `✓ N archivos verificados` | Verificación OK — ningún archivo falta ni difiere |
+| `✗ N faltan / M difieren` | Verificación fallida — el trabajo queda en estado `verify-failed` para revisión |
+| `— (saltada por dry-run)` | No aplica en simulaciones |
+
+---
+
+## Resiliencia ante cierres inesperados
+
+- **Base de datos atómica**: cada escritura se hace a un `.tmp` y se renombra, nunca corrompe el JSON aunque se corte la luz.
+- **Recuperación al arrancar**: si un trabajo estaba en estado `running` o `verifying` cuando la app se cerró de golpe, al volver a abrirla aparece como `⚠ Interrumpido` con el mensaje "La aplicación se cerró antes de terminar". Se puede reintentar con ↻.
+- **Aviso al cerrar durante migración**: si hay un trabajo activo y el usuario intenta cerrar la ventana, aparece un diálogo:
+  > *⚠ Hay una migración en curso — Si cierras la app ahora la migración se interrumpirá y los archivos que estuvieran transfiriéndose podrían quedar a medio copiar (corruptos). ¿Quieres detener la migración y salir igualmente?*
+  
+  Opciones: **Cancelar** (volver a la app) o **Detener migración y salir** (SIGTERM → flush DB → cierre).
 
 ---
 
 ## Parámetros de rclone sync
 
-La migración usa estos flags optimizados para millones de archivos:
+La migración usa estos flags optimizados para grandes volúmenes:
 
 | Flag | Valor | Motivo |
 |---|---|---|
-| `--transfers` | 16 (configurable) | Transferencias paralelas |
-| `--checkers` | transfers × 2.5 | Verificaciones paralelas |
-| `--drive-batch-mode` | async | Reduce API calls |
-| `--drive-batch-size` | 100 | Lotes de 100 ops |
-| `--fast-list` | — | Menos API calls al listar |
-| `--retries` | 10 | Reintentos ante errores |
+| `--transfers` | 32 (configurable) | Transferencias paralelas |
+| `--checkers` | transfers × 3 | Verificaciones paralelas |
+| `--fast-list` | — | Menos llamadas a la API al listar |
+| `--retries` | 10 | Reintentos ante errores transitorios |
 | `--low-level-retries` | 20 | Reintentos de bajo nivel |
-| `--drive-chunk-size` | 16M | Tamaño de chunk de upload |
-| `--ignore-errors` | — | Continúa ante errores |
-| `--stats` | 5s | Estadísticas cada 5s |
+| `--retries-sleep` | 5s | Pausa entre reintentos |
+| `--ignore-errors` | — | Continúa ante errores individuales |
+| `--size-only` | — | Compara solo tamaño (no hash) para velocidad |
+| `--no-traverse` | — | No recorre el destino para diff (más rápido) |
 | `--no-update-modtime` | — | No actualiza fecha de modificación |
+| `--drive-chunk-size` | 64M | Chunk de upload a Drive |
+| `--drive-upload-cutoff` | 64M | Umbral para upload multipart |
+| `--drive-pacer-min-sleep` | 10ms | Mínimo delay entre llamadas API |
+| `--drive-pacer-burst` | 100 | Burst de llamadas API permitido |
+| `--drive-acknowledge-abuse` | — | Descarga archivos marcados como abuso |
+| `--buffer-size` | 32M | Buffer de lectura por transferencia |
+| `--tpslimit` | 30 | Límite de transacciones por segundo |
+| `--tpslimit-burst` | 60 | Burst de TPS |
+| `--bwlimit` | configurable | Limitar ancho de banda (0 = libre) |
+| `--stats` | 3s | Estadísticas cada 3 s |
+| `--stats-one-line` | — | Stats en una línea (para parseo) |
+| `--log-level` | INFO | Nivel de log |
 
 ---
 
-## Bugs corregidos
+## Arquitectura interna
 
-### Bug principal: app se cerraba al completar login en Dropbox (y potencialmente en migración)
+### IPC renderer ↔ main
 
-**Causa raíz confirmada** (Windows Error Reporting, EventID 1001):
 ```
-P3: Management.Automation.PSInvalidOperation
-P5: Management.Automation.ScriptBlock.GetContextFromTLS
-```
-
-Los eventos `OutputDataReceived` y `ErrorDataReceived` de `System.Diagnostics.Process` disparan en **hilos del ThreadPool** de .NET. Cuando PowerShell intenta ejecutar un script block en uno de esos hilos, llama a `ScriptBlock.GetContextFromTLS()` para obtener el contexto de ejecución, pero el contexto solo existe en el hilo principal → `PSInvalidOperationException` no capturada en un hilo secundario → el runtime termina el proceso entero → la ventana se cierra.
-
-Este bug afectaba a **dos sitios**:
-1. **OAuth** (`StartOAuth`): `$ap.BeginOutputReadLine()` / `$ap.BeginErrorReadLine()`
-2. **Migración** (`$btnGo`): `$G.Proc.BeginOutputReadLine()` / `$G.Proc.BeginErrorReadLine()`
-
-#### Fix OAuth: reemplazar async I/O por `Start-Job`
-
-```powershell
-# ANTES — script blocks en hilos del ThreadPool → crash
-$ap.add_OutputDataReceived({param($s,$e);if($e.Data){[void]$buf.AppendLine($e.Data)}})
-$ap.add_ErrorDataReceived({ param($s,$e);if($e.Data){[void]$buf.AppendLine($e.Data)}})
-$ap.Start()|Out-Null; $ap.BeginOutputReadLine(); $ap.BeginErrorReadLine()
-
-# DESPUÉS — Start-Job crea un proceso PowerShell separado; el output
-# se recoge con Receive-Job desde el hilo UI (timer tick) → seguro
-$job=Start-Job -ScriptBlock {param($rc,$be); & $rc authorize $be 2>&1} -ArgumentList $rcPath,$backend
-$at.add_Tick({
-    if($job.State -notin @("Completed","Failed","Stopped")){return}
-    $out=(Receive-Job $job) -join "`n"
-    ...procesamiento del token en el hilo UI...
-})
+Renderer (React)          |  Main (Electron / Node)
+--------------------------|---------------------------
+window.api.jobs.add(...)  →  ipcMain.handle('jobs:add')
+window.api.jobs.list()    →  ipcMain.handle('jobs:list')
+window.api.queue.state()  →  ipcMain.handle('queue:state')
+window.api.jobs.stop()    →  ipcMain.handle('jobs:stop')
+                          ←  send('jobs:update')          ← queue.ts emite al cambiar estado
+                          ←  send('migration:log', line)  ← por cada línea de rclone
+                          ←  send('migration:stats', {})  ← parseStats() cada 3 s
+                          ←  send('migration:done', {})   ← al terminar sync + verify
 ```
 
-#### Fix Migración: tailear el log file desde el timer
+### Módulo `db.ts`
 
-```powershell
-# ANTES — mismo problema de ThreadPool
-$G.Proc.add_OutputDataReceived({...BeginOutputReadLine...})
+- Almacena en memoria + flush diferido (250 ms) a `migrador.db.json`.
+- Escritura atómica: `writeFileSync(tmp)` + `renameSync(tmp, real)`.
+- Al `initDB()`: jobs `running`/`verifying` → `interrupted` (crash recovery).
+- Expone: `addJob`, `updateJob`, `removeJob`, `reorderJob`, `clearFinishedJobs`, `nextPendingJob`, `hasActiveJob`, `appendLog`, `getRecentLogs`, `getQueueAutorun`/`setQueueAutorun`.
 
-# DESPUÉS — no redirigir stdout/stderr; rclone ya escribe todo al log file
-# via --log-file. El timer lee solo las líneas nuevas cada 2 segundos desde el hilo UI.
-$migSt=@{Lines=0}
-$t.add_Tick({
-    $all=[System.IO.File]::ReadAllLines($lf)
-    if($all.Count -gt $migSt.Lines){
-        $nuevas=$all[$migSt.Lines..($all.Count-1)]
-        $migSt.Lines=$all.Count
-        foreach($ln in $nuevas){LogLine $ln; UpdStats $ln}
-    }
-})
+### Módulo `queue.ts`
+
+- `processNext()` — busca el primer job `pending` y llama a `runJob(id)`.
+- `runJob(id)` — escribe headers al log, lanza `rclone sync`, parsea stats línea a línea, al cierre con código 0 llama a `runVerification()`.
+- `runVerification()` — lanza `rclone check --size-only --one-way`, parsea el resumen, actualiza el job como `done` o `verify-failed`, llama a `processNext()` para continuar la cola.
+- `stopCurrent()` — SIGTERM al proceso activo, marca el job como `stopped`.
+
+### Flujo de estados de un job
+
 ```
-
-### Bug secundario: `Start-Sleep` en el hilo UI
-
-**Causa**: `Start-Sleep -Milliseconds 700` (al iniciar OAuth) y `Start-Sleep -Milliseconds 400` (dentro del timer tick) bloqueaban el hilo principal de WinForms haciendo la app irresponsiva.
-
-**Fix**: ambos `sleep` eliminados. El timing necesario se resuelve mediante el polling del timer y `Start-Job`.
-
-### Bug terciario: kill de todos los procesos rclone
-
-**Causa**: `Stop-Process` mataba **todos** los procesos rclone al iniciar OAuth, lo que podría interrumpir migraciones en curso.
-
-**Fix**: filtrar solo procesos sin ventana (headless):
-```powershell
-Get-Process -Name "rclone" -EA SilentlyContinue |
-    Where-Object {$_.MainWindowHandle -eq [IntPtr]::Zero} |
-    Stop-Process -Force -EA SilentlyContinue
+pending
+  └─→ running  (runJob)
+        └─→ verifying  (runVerification, solo si exitCode=0 y no dry-run)
+              ├─→ done          (verify OK)
+              └─→ verify-failed (verify KO)
+        └─→ done        (dry-run, skip verify)
+        └─→ error       (exitCode ≠ 0)
+        └─→ stopped     (stopCurrent)
+  └─→ interrupted  (crash recovery al arrancar)
 ```
 
 ---
 
-## Warnings conocidos (inofensivos)
+## Actualización automática
 
-| Variable | Motivo |
-|---|---|
-| `$OL` | Color naranja claro definido pero no usado en la UI actual |
-| `$stW`, `$stGap` | Variables de layout de las tarjetas de stats, calculadas pero aplicadas inline |
+La app comprueba GitHub Releases al arrancar (con 3 s de retraso). Si hay una versión mayor disponible muestra un banner con enlace de descarga directa al `.exe`. No hay autoinstalación — el usuario descarga e instala el nuevo `.exe` manualmente.
 
 ---
 
-## Configuración guardada
+## Configuración OAuth (detalle)
 
-`envMigracion.json` — se crea automáticamente al conectar las cuentas:
-
-```json
-{
-    "RemoteDB": "dropbox",
-    "RemoteGD": "gdrive"
-}
 ```
-
-Al arrancar, si el archivo existe y ambos remotes están configurados en rclone, la app salta directamente a la página de Migrar.
+Usuario pulsa "Conectar Dropbox"
+  │
+  ├─ Lanza: rclone authorize dropbox  (windowsHide:true)
+  │   (captura stdout+stderr en memoria)
+  │
+  ├─ Espera cierre del proceso
+  │
+  ├─ Extrae JSON de token con regex:
+  │   /\{[\s\S]*?"access_token"[\s\S]*?"expiry"\s*:\s*"[^"]*"[\s\S]*?\}/
+  │
+  ├─ Token encontrado?
+  │   ├─ rclone config create <nombre> dropbox token <tok>
+  │   └─ Verifica con rclone listremotes
+  │
+  └─ Sin token?
+      └─ getRemotes() → ¿ya estaba configurado? → ok / error
+```

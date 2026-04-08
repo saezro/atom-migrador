@@ -2,14 +2,19 @@
   "name": "atom-migrador",
   "version": "1.0.0",
   "description": "Migrador Dropbox → Google Shared Drive | Aerotools-UAV",
+  "author": {
+    "name": "Aerotools-UAV",
+    "email": "info@aerotools-uav.com",
+    "url": "https://aerotools-uav.com"
+  },
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "predist": "node scripts/download-rclone.mjs",
-    "dist": "npm run build && electron-builder --win --publish never",
-    "dist:gh": "npm run build && electron-builder --win --publish always"
+    "dist": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --publish never && node scripts/copy-installer.mjs",
+    "dist:gh": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --publish always && node scripts/copy-installer.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -20,6 +25,7 @@
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
+    "cross-env": "^10.1.0",
     "electron": "^31.2.1",
     "electron-builder": "^24.13.3",
     "electron-vite": "^2.3.0",
@@ -29,14 +35,34 @@
   "build": {
     "appId": "com.aerotools.atom-migrador",
     "productName": "Atom Migrador",
-    "directories": { "output": "dist" },
-    "files": ["out/**/*"],
+    "copyright": "Copyright © 2025 Aerotools-UAV",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*"
+    ],
     "extraResources": [
-      { "from": "resources/extra", "to": "extra", "filter": ["**/*"] }
+      {
+        "from": "resources/extra",
+        "to": "extra",
+        "filter": [
+          "**/*"
+        ]
+      }
     ],
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
-      "icon": "resources/icon.ico"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "resources/icon.ico",
+      "signingHashAlgorithms": [],
+      "sign": null
     },
     "nsis": {
       "oneClick": false,
@@ -46,7 +72,7 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "Aerotools-UAV",
+      "owner": "saezro",
       "repo": "atom-migrador"
     }
   }

@@ -18,6 +18,62 @@ export interface DriveItem {
   name: string
 }
 
+export type JobStatus =
+  | 'pending'
+  | 'running'
+  | 'verifying'
+  | 'done'
+  | 'error'
+  | 'stopped'
+  | 'interrupted'
+  | 'verify-failed'
+
+export interface JobStats {
+  files: string
+  speed: string
+  eta: string
+  progress: string
+  errors: string
+}
+
+export interface JobVerification {
+  status: 'ok' | 'fail' | 'skip'
+  missing: number
+  differ: number
+  checked: number
+  error?: string
+  checkedAt: string
+}
+
+export interface Job {
+  id: string
+  name: string
+  status: JobStatus
+  config: SyncConfig
+  createdAt: string
+  startedAt?: string
+  finishedAt?: string
+  exitCode?: number
+  logPath?: string
+  logDir?: string
+  errorMsg?: string
+  stats?: JobStats
+  verification?: JobVerification
+}
+
+export interface QueueState {
+  paused: boolean
+  autorun: boolean
+  currentJobId: string | null
+  hasRunning: boolean
+}
+
+export interface RecentLogEntry {
+  ts: string
+  jobId?: string
+  line: string
+}
+
 export interface ElectronAPI {
   window: {
     minimize: () => void
@@ -31,8 +87,23 @@ export interface ElectronAPI {
     listRemotes: () => Promise<string[]>
     listFolders: (remote: string, path: string, nsMode?: string, nsId?: string, driveId?: string) => Promise<string[] | { error: string }>
     listDrives: (remote: string) => Promise<DriveItem[]>
-    startSync: (config: SyncConfig) => Promise<{ ok?: boolean; logDir?: string; error?: string }>
-    stopSync: () => Promise<{ ok: boolean }>
+  }
+  jobs: {
+    list: () => Promise<Job[]>
+    get: (id: string) => Promise<Job | undefined>
+    add: (payload: { name: string; config: SyncConfig }) => Promise<Job>
+    remove: (id: string) => Promise<{ ok: boolean; error?: string }>
+    reorder: (id: string, dir: -1 | 1) => Promise<{ ok: boolean }>
+    clearFinished: () => Promise<{ removed: number }>
+    runNow: (id: string) => Promise<{ ok: boolean; error?: string }>
+    stop: () => Promise<{ ok: boolean }>
+    recentLogs: (jobId?: string) => Promise<RecentLogEntry[]>
+  }
+  queue: {
+    state: () => Promise<QueueState>
+    setPaused: (paused: boolean) => Promise<{ ok: boolean }>
+    setAutorun: (autorun: boolean) => Promise<{ ok: boolean }>
+    processNext: () => Promise<{ ok: boolean }>
   }
   dropbox: {
     getTeamNs: (remote: string) => Promise<{ id: string; name: string } | null>

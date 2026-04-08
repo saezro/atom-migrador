@@ -95,11 +95,20 @@ export default function AccountsPage({
   const [verifyMsg, setVerifyMsg] = useState('')
   const [verifyOk, setVerifyOk] = useState(false)
 
-  // Load saved remote names
+  // On mount: load saved names and auto-check if already connected
   useEffect(() => {
-    window.api.env.load().then(data => {
+    window.api.env.load().then(async data => {
+      const db = data.RemoteDB || remoteDB
+      const gd = data.RemoteGD || remoteGD
       if (data.RemoteDB) onRemoteDBChange(data.RemoteDB)
       if (data.RemoteGD) onRemoteGDChange(data.RemoteGD)
+
+      const remotes = await window.api.rclone.listRemotes()
+      const dbOk = remotes.includes(db.trim())
+      const gdOk = remotes.includes(gd.trim())
+      if (dbOk) setDbStatus('ok')
+      if (gdOk) setGdStatus('ok')
+      if (dbOk && gdOk) onReady()
     })
   }, [])
 
