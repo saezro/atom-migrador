@@ -43,7 +43,17 @@ export interface ElectronAPI {
   }
   shell: {
     openLogs: () => Promise<void>
+    openExternal: (url: string) => Promise<void>
   }
+  updates: {
+    check: () => Promise<{
+      hasUpdate: boolean
+      version: string
+      currentVersion: string
+      url: string
+    } | null>
+  }
+  getVersion: () => Promise<string>
   on: (channel: string, listener: (...args: unknown[]) => void) => void
   off: (channel: string, listener: (...args: unknown[]) => void) => void
 }

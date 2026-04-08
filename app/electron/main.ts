@@ -29,13 +29,16 @@ let authorizeProc: ReturnType<typeof spawn> | null = null
 let tailInterval: ReturnType<typeof setInterval> | null = null
 
 // Paths
-const APP_ROOT = join(app.getPath('userData'), '..')  // parent of app-specific dir
-const SCRIPT_DIR = app.isPackaged
-  ? join(process.resourcesPath, 'extra')
-  : join(__dirname, '..', '..')   // dev: points to Migrador root
-
-const ENV_FILE = join(SCRIPT_DIR, 'envMigracion.json')
-const LOGS_DIR = join(SCRIPT_DIR, 'logs')
+// Writable user data (persists across updates)
+const USER_DATA = app.getPath('userData')
+const ENV_FILE = join(USER_DATA, 'envMigracion.json')
+const LOGS_DIR = join(USER_DATA, 'logs')
+// rclone bundled with installer (read-only resources)
+const BUNDLED_RCLONE = app.isPackaged
+  ? join(process.resourcesPath, 'extra', 'rclone.exe')
+  : join(__dirname, '..', '..', 'resources', 'extra', 'rclone.exe')
+// rclone downloaded/installed by the user (writable userData)
+const USER_RCLONE = join(USER_DATA, 'rclone.exe')
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function send(channel: string, ...args: unknown[]) {
@@ -46,8 +49,9 @@ function send(channel: string, ...args: unknown[]) {
 
 function findRclone(): { found: boolean; path: string; version: string } {
   const candidates = [
+    BUNDLED_RCLONE,   // bundled inside installer (extraResources)
+    USER_RCLONE,      // previously downloaded to userData
     'rclone',
-    join(SCRIPT_DIR, 'rclone.exe'),
     'C:\\rclone\\rclone.exe',
     join(process.env.ProgramFiles ?? 'C:\\Program Files', 'rclone', 'rclone.exe'),
   ]
@@ -195,7 +199,7 @@ ipcMain.handle('rclone:install', async () => {
             ], { encoding: 'utf8', timeout: 5000 })
             const exePath = findResult.stdout.trim().split('\n')[0].trim()
             if (exePath && existsSync(exePath)) {
-              const dest = join(SCRIPT_DIR, 'rclone.exe')
+              const dest = USER_RCLONE
               require('fs').copyFileSync(exePath, dest)
               if (findRclone().found) { resolve('download'); return }
             }
@@ -462,3 +466,73 @@ ipcMain.handle('shell:open-logs', () => {
   if (existsSync(LOGS_DIR)) shell.openPath(LOGS_DIR)
   else shell.showItemInFolder(ENV_FILE)
 })
+
+ipcMain.handle('shell:open-external', (_, url: string) => {
+  if (typeof url === 'string' && url.startsWith('https://')) {
+    shell.openExternal(url)
+  }
+})
+
+ipcMain.handle('app:version', () => app.getVersion())
+
+ipcMain.handle('updates:check', () => checkGitHubRelease())
+
+// ─── Update check ─────────────────────────────────────────────────────────────
+function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map(Number)
+  const pb = b.split('.').map(Number)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0)
+    if (diff !== 0) return diff
+  }
+  return 0
+}
+
+function checkGitHubRelease(): Promise<{
+  hasUpdate: boolean
+  version: string
+  currentVersion: string
+  url: string
+} | null> {
+  return new Promise((resolve) => {
+    const currentVersion = app.getVersion()
+    const headers: Record<string, string> = {
+      'User-Agent': `atom-migrador/${currentVersion}`,
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28'
+    }
+    const token = process.env.GH_TOKEN
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
+    const req = https.request({
+      hostname: 'api.github.com',
+      path: '/repos/Aerotools-UAV/atom-migrador/releases/latest',
+      method: 'GET',
+      headers,
+      timeout: 8000
+    }, (res) => {
+      let data = ''
+      res.on('data', (chunk: Buffer) => { data += chunk.toString() })
+      res.on('end', () => {
+        try {
+          if ((res.statusCode ?? 0) !== 200) { resolve(null); return }
+          const release = JSON.parse(data)
+          const latestVersion = (release.tag_name ?? '').replace(/^v/, '')
+          const hasUpdate = latestVersion.length > 0 && compareVersions(latestVersion, currentVersion) > 0
+          const asset = (release.assets ?? []).find((a: { name: string }) =>
+            a.name.endsWith('.exe') && a.name.toLowerCase().includes('setup')
+          )
+          resolve({
+            hasUpdate,
+            version: latestVersion,
+            currentVersion,
+            url: (asset as { browser_download_url?: string })?.browser_download_url ?? release.html_url ?? ''
+          })
+        } catch { resolve(null) }
+      })
+    })
+    req.on('error', () => resolve(null))
+    req.on('timeout', () => { req.destroy(); resolve(null) })
+    req.end()
+  })
+}

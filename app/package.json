@@ -7,7 +7,9 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "dist": "npm run build && electron-builder --win"
+    "predist": "node scripts/download-rclone.mjs",
+    "dist": "npm run build && electron-builder --win --publish never",
+    "dist:gh": "npm run build && electron-builder --win --publish always"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -29,13 +31,23 @@
     "productName": "Atom Migrador",
     "directories": { "output": "dist" },
     "files": ["out/**/*"],
+    "extraResources": [
+      { "from": "resources/extra", "to": "extra", "filter": ["**/*"] }
+    ],
     "win": {
       "target": [{ "target": "nsis", "arch": ["x64"] }],
       "icon": "resources/icon.ico"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Aerotools-UAV",
+      "repo": "atom-migrador"
     }
   }
 }

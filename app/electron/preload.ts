@@ -25,8 +25,13 @@ contextBridge.exposeInMainWorld('api', {
     save: (data: unknown) => ipcRenderer.invoke('env:save', data)
   },
   shell: {
-    openLogs: () => ipcRenderer.invoke('shell:open-logs')
+    openLogs: () => ipcRenderer.invoke('shell:open-logs'),
+    openExternal: (url: string) => ipcRenderer.invoke('shell:open-external', url)
   },
+  updates: {
+    check: () => ipcRenderer.invoke('updates:check')
+  },
+  getVersion: () => ipcRenderer.invoke('app:version'),
   on: (channel: string, listener: (...args: unknown[]) => void) => {
     ipcRenderer.on(channel, (_event, ...args) => listener(...args))
   },
