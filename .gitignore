@@ -1,0 +1,12 @@
+# Logs de sesiones de migración
+logs/
+
+# Configuración local con credenciales (si contiene datos sensibles)
+envMigracion.json
+
+# rclone binario descargado
+rclone.exe
+
+# Archivos temporales de Windows
+Thumbs.db
+desktop.ini
