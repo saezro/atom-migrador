@@ -13,7 +13,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "predist": "node scripts/download-rclone.mjs",
-    "dist": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --publish always",
+    "dist": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --publish never",
     "postdist": "node scripts/copy-installer.mjs"
   },
   "dependencies": {
