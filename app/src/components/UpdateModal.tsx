@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-type Phase = 'available' | 'downloading' | 'ready'
+type Phase = 'available' | 'downloading' | 'ready' | 'error'
 
 interface Props {
   version: string
@@ -11,21 +11,30 @@ interface Props {
 export default function UpdateModal({ version, currentVersion, onDismiss }: Props) {
   const [phase, setPhase] = useState<Phase>('available')
   const [progress, setProgress] = useState(0)
+  const [errorMsg, setErrorMsg] = useState('')
 
   useEffect(() => {
     const onProgress = (pct: unknown) => setProgress(Number(pct))
     const onReady = () => setPhase('ready')
+    const onError = (msg: unknown) => {
+      setErrorMsg(String(msg))
+      setPhase('error')
+    }
     window.api.on('update:progress', onProgress)
     window.api.on('update:ready', onReady)
+    window.api.on('update:error', onError)
     return () => {
       window.api.off('update:progress', onProgress)
       window.api.off('update:ready', onReady)
+      window.api.off('update:error', onError)
     }
   }, [])
 
   async function install() {
-    if (phase === 'available') {
+    if (phase === 'available' || phase === 'error') {
       setPhase('downloading')
+      setProgress(0)
+      setErrorMsg('')
       await window.api.updates.download()
     } else if (phase === 'ready') {
       window.api.updates.install()
@@ -66,6 +75,19 @@ export default function UpdateModal({ version, currentVersion, onDismiss }: Prop
           </div>
         )}
 
+        {phase === 'error' && (
+          <div className="flex-col gap-4">
+            <div className="badge badge-err" style={{ alignSelf: 'flex-start' }}>
+              ✗ Error al descargar
+            </div>
+            {errorMsg && (
+              <div className="mono text-muted" style={{ fontSize: 11, wordBreak: 'break-all' }}>
+                {errorMsg}
+              </div>
+            )}
+          </div>
+        )}
+
         {phase === 'ready' && (
           <div className="badge badge-ok" style={{ alignSelf: 'flex-start' }}>
             ✓ Descarga completada — lista para instalar
@@ -78,9 +100,10 @@ export default function UpdateModal({ version, currentVersion, onDismiss }: Prop
             onClick={install}
             disabled={phase === 'downloading'}
           >
-            {phase === 'available' && 'Instalar'}
+            {phase === 'available'   && 'Instalar'}
             {phase === 'downloading' && '⟳ Descargando…'}
-            {phase === 'ready' && '↻ Reiniciar e instalar'}
+            {phase === 'ready'       && '↻ Reiniciar e instalar'}
+            {phase === 'error'       && '↺ Reintentar'}
           </button>
           {phase !== 'downloading' && (
             <button className="btn" onClick={onDismiss}>

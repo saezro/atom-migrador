@@ -509,7 +509,9 @@ function setupAutoUpdater() {
     send('update:not-available')
   })
 
-  autoUpdater.on('error', () => { /* ignore silently */ })
+  autoUpdater.on('error', (err) => {
+    send('update:error', err?.message ?? 'Error desconocido')
+  })
 
   // Check after 3s so the window is ready
   setTimeout(() => {
@@ -518,7 +520,9 @@ function setupAutoUpdater() {
 }
 
 ipcMain.handle('updates:download', () => {
-  autoUpdater.downloadUpdate().catch(() => { /* ignore */ })
+  autoUpdater.downloadUpdate().catch((err) => {
+    send('update:error', err?.message ?? 'Error al descargar')
+  })
   return { ok: true }
 })
 
