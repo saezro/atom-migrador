@@ -3,6 +3,7 @@ import { join } from 'path'
 import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { spawn, spawnSync } from 'child_process'
 import * as https from 'https'
+import { autoUpdater } from 'electron-updater'
 import {
   initDB,
   flushNow,
@@ -171,6 +172,7 @@ app.whenReady().then(() => {
     send
   })
   createWindow()
+  setupAutoUpdater()
   // Try to resume any pending jobs from a previous run, after rclone is detected
   setTimeout(() => {
     if (rcPath) processNext()
@@ -295,6 +297,8 @@ ipcMain.handle('rclone:authorize', async (_, backend: string, remoteName: string
 
 ipcMain.handle('rclone:list-remotes', () => getRemotes())
 
+const FOLDER_LIMIT = 300
+
 ipcMain.handle('rclone:list-folders', async (_, remote: string, path: string, nsMode?: string, nsId?: string, driveId?: string) => {
   if (!rcPath) return { error: 'rclone no encontrado' }
   const args = ['lsd', `${remote}:${path}`, '--max-depth', '1']
@@ -307,7 +311,7 @@ ipcMain.handle('rclone:list-folders', async (_, remote: string, path: string, ns
   try {
     const r = spawnSync(rcPath, args, { encoding: 'utf8', timeout: 30000 })
     const lines = (r.stdout ?? '').split('\n')
-    const folders = lines
+    const all = lines
       .filter(l => /^\s*-?\d/.test(l))
       .map(l => {
         const parts = l.trim().split(/\s+/, 6)
@@ -315,8 +319,10 @@ ipcMain.handle('rclone:list-folders', async (_, remote: string, path: string, ns
       })
       .filter(Boolean)
       .sort()
+    const truncated = all.length > FOLDER_LIMIT
+    const folders = truncated ? all.slice(0, FOLDER_LIMIT) : all
     if (r.stderr && r.stderr.includes('ERROR')) return { error: r.stderr }
-    return folders
+    return { folders, truncated, total: all.length }
   } catch (e: unknown) {
     return { error: String(e) }
   }
@@ -403,12 +409,12 @@ ipcMain.handle('dropbox:team-ns', async (_, remoteName: string) => {
     const access = tok.access_token
     if (!access) return null
 
-    // Call Dropbox API
+    // Call Dropbox API: list_namespaces to find team namespace
     return new Promise((resolve) => {
       const body = Buffer.from('null')
       const options: https.RequestOptions = {
         hostname: 'api.dropboxapi.com',
-        path: '/2/users/get_current_account',
+        path: '/2/namespaces/list_namespaces',
         method: 'POST',
         headers: {
           Authorization: `Bearer ${access}`,
@@ -422,10 +428,19 @@ ipcMain.handle('dropbox:team-ns', async (_, remoteName: string) => {
         res.on('end', () => {
           try {
             const parsed = JSON.parse(data)
-            resolve({
-              id: String(parsed.root_info?.root_namespace_id ?? ''),
-              name: parsed.team?.name ?? ''
-            })
+            const namespaces = parsed.namespaces ?? []
+            // Find team_space namespace (skip personal)
+            const teamNs = namespaces.find((ns: { namespace_type: string; namespace_id: string; name?: string }) =>
+              ns.namespace_type === 'team'
+            )
+            if (teamNs) {
+              resolve({
+                id: teamNs.namespace_id,
+                name: teamNs.name || 'Equipo'
+              })
+            } else {
+              resolve(null)
+            }
           } catch {
             resolve(null)
           }
@@ -472,65 +487,36 @@ ipcMain.handle('shell:open-external', (_, url: string) => {
 })
 
 ipcMain.handle('app:version', () => app.getVersion())
+ipcMain.handle('updates:install', () => {
+  autoUpdater.quitAndInstall(false, true)
+})
 
-ipcMain.handle('updates:check', () => checkGitHubRelease())
+// ─── Auto-updater ─────────────────────────────────────────────────────────────
+function setupAutoUpdater() {
+  autoUpdater.autoDownload = false
+  autoUpdater.autoInstallOnAppQuit = false
 
-// ─── Update check ─────────────────────────────────────────────────────────────
-function compareVersions(a: string, b: string): number {
-  const pa = a.split('.').map(Number)
-  const pb = b.split('.').map(Number)
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const diff = (pa[i] ?? 0) - (pb[i] ?? 0)
-    if (diff !== 0) return diff
-  }
-  return 0
-}
-
-function checkGitHubRelease(): Promise<{
-  hasUpdate: boolean
-  version: string
-  currentVersion: string
-  url: string
-} | null> {
-  return new Promise((resolve) => {
-    const currentVersion = app.getVersion()
-    const headers: Record<string, string> = {
-      'User-Agent': `atom-migrador/${currentVersion}`,
-      'Accept': 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28'
-    }
-    const token = process.env.GH_TOKEN
-    if (token) headers['Authorization'] = `Bearer ${token}`
-
-    const req = https.request({
-      hostname: 'api.github.com',
-      path: '/repos/Aerotools-UAV/atom-migrador/releases/latest',
-      method: 'GET',
-      headers,
-      timeout: 8000
-    }, (res) => {
-      let data = ''
-      res.on('data', (chunk: Buffer) => { data += chunk.toString() })
-      res.on('end', () => {
-        try {
-          if ((res.statusCode ?? 0) !== 200) { resolve(null); return }
-          const release = JSON.parse(data)
-          const latestVersion = (release.tag_name ?? '').replace(/^v/, '')
-          const hasUpdate = latestVersion.length > 0 && compareVersions(latestVersion, currentVersion) > 0
-          const asset = (release.assets ?? []).find((a: { name: string }) =>
-            a.name.endsWith('.exe') && a.name.toLowerCase().includes('setup')
-          )
-          resolve({
-            hasUpdate,
-            version: latestVersion,
-            currentVersion,
-            url: (asset as { browser_download_url?: string })?.browser_download_url ?? release.html_url ?? ''
-          })
-        } catch { resolve(null) }
-      })
-    })
-    req.on('error', () => resolve(null))
-    req.on('timeout', () => { req.destroy(); resolve(null) })
-    req.end()
+  autoUpdater.on('update-available', (info) => {
+    send('update:available', { version: info.version, currentVersion: app.getVersion() })
   })
+
+  autoUpdater.on('download-progress', (progress) => {
+    send('update:progress', Math.round(progress.percent))
+  })
+
+  autoUpdater.on('update-downloaded', () => {
+    send('update:ready')
+  })
+
+  autoUpdater.on('error', () => { /* ignore silently */ })
+
+  // Check after 3s so the window is ready
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch(() => { /* ignore */ })
+  }, 3000)
 }
+
+ipcMain.handle('updates:download', () => {
+  autoUpdater.downloadUpdate().catch(() => { /* ignore */ })
+  return { ok: true }
+})

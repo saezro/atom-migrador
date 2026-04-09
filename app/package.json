@@ -1,6 +1,6 @@
 {
   "name": "atom-migrador",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Migrador Dropbox → Google Shared Drive | Aerotools-UAV",
   "author": {
     "name": "Aerotools-UAV",
@@ -13,10 +13,11 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "predist": "node scripts/download-rclone.mjs",
-    "dist": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --publish never && node scripts/copy-installer.mjs",
-    "dist:gh": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --publish always && node scripts/copy-installer.mjs"
+    "dist": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --publish always",
+    "postdist": "node scripts/copy-installer.mjs"
   },
   "dependencies": {
+    "electron-updater": "^6.8.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

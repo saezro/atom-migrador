@@ -17,7 +17,6 @@ export default function FolderBrowser({ remote, label, nsMode, nsId, driveId, on
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [confirmed, setConfirmed] = useState<string | null>(null)
-
   const load = useCallback(async (newPath: string) => {
     if (!remote) return
     setLoading(true)
@@ -26,10 +25,10 @@ export default function FolderBrowser({ remote, label, nsMode, nsId, driveId, on
     setSelected('')
     const result = await window.api.rclone.listFolders(remote, newPath, nsMode, nsId, driveId)
     setLoading(false)
-    if (Array.isArray(result)) {
-      setItems(result)
-    } else {
+    if ('error' in result) {
       setError(result.error || 'Error al cargar carpetas')
+    } else {
+      setItems(result.folders)
     }
   }, [remote, nsMode, nsId, driveId])
 

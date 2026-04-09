@@ -85,7 +85,7 @@ export interface ElectronAPI {
     install: () => Promise<'winget' | 'download' | 'error'>
     authorize: (backend: string, name: string) => Promise<{ ok: boolean; remote?: string; error?: string }>
     listRemotes: () => Promise<string[]>
-    listFolders: (remote: string, path: string, nsMode?: string, nsId?: string, driveId?: string) => Promise<string[] | { error: string }>
+    listFolders: (remote: string, path: string, nsMode?: string, nsId?: string, driveId?: string) => Promise<{ folders: string[]; truncated: boolean; total: number } | { error: string }>
     listDrives: (remote: string) => Promise<DriveItem[]>
   }
   jobs: {
@@ -117,12 +117,8 @@ export interface ElectronAPI {
     openExternal: (url: string) => Promise<void>
   }
   updates: {
-    check: () => Promise<{
-      hasUpdate: boolean
-      version: string
-      currentVersion: string
-      url: string
-    } | null>
+    download: () => Promise<{ ok: boolean }>
+    install: () => Promise<void>
   }
   getVersion: () => Promise<string>
   on: (channel: string, listener: (...args: unknown[]) => void) => void

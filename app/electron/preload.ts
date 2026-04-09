@@ -44,7 +44,8 @@ contextBridge.exposeInMainWorld('api', {
     openExternal: (url: string) => ipcRenderer.invoke('shell:open-external', url)
   },
   updates: {
-    check: () => ipcRenderer.invoke('updates:check')
+    download: () => ipcRenderer.invoke('updates:download'),
+    install: () => ipcRenderer.invoke('updates:install')
   },
   getVersion: () => ipcRenderer.invoke('app:version'),
   on: (channel: string, listener: (...args: unknown[]) => void) => {

@@ -3,17 +3,12 @@ import AccountsPage from './pages/AccountsPage'
 import MigratePage from './pages/MigratePage'
 import JobsPage from './pages/JobsPage'
 import TitleBar from './components/TitleBar'
-import UpdateBanner from './components/UpdateBanner'
+import UpdateModal from './components/UpdateModal'
 
 const TABS = ['Cuentas', 'Migrar', 'Cola'] as const
 type Tab = (typeof TABS)[number]
 
-interface UpdateInfo {
-  hasUpdate: boolean
-  version: string
-  currentVersion: string
-  url: string
-}
+interface UpdateInfo { version: string; currentVersion: string }
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('Cuentas')
@@ -22,22 +17,25 @@ export default function App() {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
 
   useEffect(() => {
-    // Detectar rclone en segundo plano (activa la cola si hay jobs pendientes)
     window.api.rclone.check().catch(() => {})
 
-    const timer = setTimeout(() => {
-      window.api.updates.check().then((info) => {
-        if (info?.hasUpdate) setUpdateInfo(info)
-      }).catch(() => {})
-    }, 3000)
-    return () => clearTimeout(timer)
+    const onAvailable = (info: unknown) => {
+      const u = info as UpdateInfo
+      setUpdateInfo({ version: u.version, currentVersion: u.currentVersion })
+    }
+    window.api.on('update:available', onAvailable)
+    return () => window.api.off('update:available', onAvailable)
   }, [])
 
   return (
     <div className="app-shell">
       <TitleBar />
       {updateInfo && (
-        <UpdateBanner info={updateInfo} onDismiss={() => setUpdateInfo(null)} />
+        <UpdateModal
+          version={updateInfo.version}
+          currentVersion={updateInfo.currentVersion}
+          onDismiss={() => setUpdateInfo(null)}
+        />
       )}
       <nav className="nav-bar">
         {TABS.map((t) => (

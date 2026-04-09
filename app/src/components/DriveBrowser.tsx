@@ -53,10 +53,10 @@ export default function DriveBrowser({ remote, onSelect }: Props) {
     setSelectedFolder('')
     const result = await window.api.rclone.listFolders(remote, folderPath, undefined, undefined, drive.id)
     setLoadingFolders(false)
-    if (Array.isArray(result)) {
-      setItems(result)
-    } else {
+    if ('error' in result) {
       setFoldersError(result.error || 'Error al cargar carpetas')
+    } else {
+      setItems(result.folders)
     }
   }, [remote])
 
