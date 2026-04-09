@@ -394,62 +394,11 @@ ipcMain.handle('jobs:recent-logs', (_, jobId?: string) => getRecentLogs(jobId))
 ipcMain.handle('dropbox:team-ns', async (_, remoteName: string) => {
   if (!rcPath) return null
   try {
-    // Force token refresh
-    spawnSync(rcPath, ['lsd', `${remoteName}:`, '--max-depth', '1'], {
-      encoding: 'utf8', timeout: 10000
-    })
-    // Read config to get token
-    const cfg = spawnSync(rcPath, ['config', 'show', remoteName], {
-      encoding: 'utf8', timeout: 5000
-    }).stdout ?? ''
-
-    const tokenMatch = cfg.match(/token\s*=\s*(\{[^\r\n]+\})/)
-    if (!tokenMatch) return null
-    const tok = JSON.parse(tokenMatch[1])
-    const access = tok.access_token
-    if (!access) return null
-
-    // Call Dropbox API: list_namespaces to find team namespace
-    return new Promise((resolve) => {
-      const body = Buffer.from('null')
-      const options: https.RequestOptions = {
-        hostname: 'api.dropboxapi.com',
-        path: '/2/namespaces/list_namespaces',
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${access}`,
-          'Content-Type': 'application/json',
-          'Content-Length': body.length
-        }
-      }
-      const req = https.request(options, (res) => {
-        let data = ''
-        res.on('data', (chunk: Buffer) => { data += chunk.toString() })
-        res.on('end', () => {
-          try {
-            const parsed = JSON.parse(data)
-            const namespaces = parsed.namespaces ?? []
-            // Find team_space namespace (skip personal)
-            const teamNs = namespaces.find((ns: { namespace_type: string; namespace_id: string; name?: string }) =>
-              ns.namespace_type === 'team'
-            )
-            if (teamNs) {
-              resolve({
-                id: teamNs.namespace_id,
-                name: teamNs.name || 'Equipo'
-              })
-            } else {
-              resolve(null)
-            }
-          } catch {
-            resolve(null)
-          }
-        })
-      })
-      req.on('error', () => resolve(null))
-      req.write(body)
-      req.end()
-    })
+    // Verify the remote is configured and accessible
+    const remotes = getRemotes()
+    if (!remotes.includes(remoteName)) return null
+    // rclone accepts 'team_space' directly as --dropbox-root-namespace value
+    return { id: 'team_space', name: 'Equipo' }
   } catch {
     return null
   }

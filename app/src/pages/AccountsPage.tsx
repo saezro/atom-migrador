@@ -108,7 +108,6 @@ export default function AccountsPage({
       const gdOk = remotes.includes(gd.trim())
       if (dbOk) setDbStatus('ok')
       if (gdOk) setGdStatus('ok')
-      if (dbOk && gdOk) onReady()
     })
   }, [])
 

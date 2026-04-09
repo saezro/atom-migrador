@@ -8,11 +8,29 @@ interface Props {
 
 type Level = 'drives' | 'folders'
 
+interface DriveGroup {
+  prefix: string
+  items: DriveItem[]
+}
+
+function computeGroups(drives: DriveItem[]): DriveGroup[] {
+  const map = new Map<string, DriveItem[]>()
+  for (const d of drives) {
+    // Extract prefix: remove trailing _N or _NN suffix
+    const m = d.name.match(/^(.+?)_\d+$/)
+    const prefix = m ? m[1] : d.name
+    if (!map.has(prefix)) map.set(prefix, [])
+    map.get(prefix)!.push(d)
+  }
+  return Array.from(map.entries()).map(([prefix, items]) => ({ prefix, items }))
+}
+
 export default function DriveBrowser({ remote, onSelect }: Props) {
   // ── Level: drives ──
   const [drives, setDrives] = useState<DriveItem[]>([])
   const [loadingDrives, setLoadingDrives] = useState(false)
   const [drivesError, setDrivesError] = useState('')
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
   // ── Level: folders ──
   const [level, setLevel] = useState<Level>('drives')
@@ -26,6 +44,15 @@ export default function DriveBrowser({ remote, onSelect }: Props) {
   const [loadingFolders, setLoadingFolders] = useState(false)
   const [foldersError, setFoldersError] = useState('')
   const [confirmed, setConfirmed] = useState<string | null>(null)
+
+  function toggleGroup(prefix: string) {
+    setExpandedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(prefix)) next.delete(prefix)
+      else next.add(prefix)
+      return next
+    })
+  }
 
   // Load drives on mount
   useEffect(() => {
@@ -107,6 +134,8 @@ export default function DriveBrowser({ remote, onSelect }: Props) {
   const loading = level === 'drives' ? loadingDrives : loadingFolders
   const error = level === 'drives' ? drivesError : foldersError
 
+  const groups = computeGroups(drives)
+
   return (
     <div className="flex-col gap-8" style={{ height: '100%' }}>
       {/* Breadcrumb */}
@@ -115,7 +144,7 @@ export default function DriveBrowser({ remote, onSelect }: Props) {
       </div>
 
       {/* List */}
-      <ul className="folder-list" style={{ flex: 1, minHeight: 0 }}>
+      <ul className="folder-list" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         {loading && (
           <li className="folder-item text-muted" style={{ justifyContent: 'center', padding: '12px 0' }}>
             <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⟳</span>
@@ -136,18 +165,56 @@ export default function DriveBrowser({ remote, onSelect }: Props) {
           </li>
         )}
 
-        {/* Drives */}
-        {!loading && level === 'drives' && drives.map(d => (
-          <li
-            key={d.id}
-            className={`folder-item${selectedDrive?.id === d.id ? ' active' : ''}`}
-            onClick={() => setSelectedDrive(d)}
-            onDoubleClick={() => enterDrive(d)}
-          >
-            <span style={{ color: 'var(--orange)', fontSize: 13 }}>🗂</span>
-            {d.name}
-          </li>
-        ))}
+        {/* Drives — grouped by prefix */}
+        {!loading && level === 'drives' && groups.map(group => {
+          if (group.items.length === 1) {
+            // Single item: render directly
+            const d = group.items[0]
+            return (
+              <li
+                key={d.id}
+                className={`folder-item${selectedDrive?.id === d.id ? ' active' : ''}`}
+                onClick={() => setSelectedDrive(d)}
+                onDoubleClick={() => enterDrive(d)}
+              >
+                <span style={{ color: 'var(--orange)', fontSize: 13 }}>🗂</span>
+                {d.name}
+              </li>
+            )
+          }
+          // Multi-item group: collapsible
+          const isExpanded = expandedGroups.has(group.prefix)
+          return (
+            <li key={group.prefix} style={{ listStyle: 'none' }}>
+              <div
+                className="folder-item"
+                style={{ fontWeight: 600, cursor: 'pointer', userSelect: 'none' }}
+                onClick={() => toggleGroup(group.prefix)}
+              >
+                <span style={{ color: 'var(--orange)', fontSize: 11, minWidth: 12 }}>
+                  {isExpanded ? '▾' : '▸'}
+                </span>
+                <span style={{ color: 'var(--orange)', fontSize: 13 }}>🗂</span>
+                {group.prefix}
+                <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--muted)', paddingLeft: 8 }}>
+                  {group.items.length}
+                </span>
+              </div>
+              {isExpanded && group.items.map(d => (
+                <div
+                  key={d.id}
+                  className={`folder-item${selectedDrive?.id === d.id ? ' active' : ''}`}
+                  style={{ paddingLeft: 32 }}
+                  onClick={() => setSelectedDrive(d)}
+                  onDoubleClick={() => enterDrive(d)}
+                >
+                  <span style={{ color: 'var(--orange)', fontSize: 13 }}>🗂</span>
+                  {d.name}
+                </div>
+              ))}
+            </li>
+          )
+        })}
 
         {/* Folders inside drive */}
         {!loading && level === 'folders' && items.map(item => (

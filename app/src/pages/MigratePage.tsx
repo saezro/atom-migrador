@@ -112,7 +112,7 @@ export default function MigratePage({ remoteDB, remoteGD, onJobQueued }: Props) 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
 
         {/* Dropbox origin */}
-        <div className="card flex-col gap-12" style={{ minHeight: 460 }}>
+        <div className="card flex-col gap-12" style={{ height: 460 }}>
           <div className="card-header">
             <div className="card-strip" />
             <span className="card-title">Origen (Dropbox)</span>
@@ -150,7 +150,7 @@ export default function MigratePage({ remoteDB, remoteGD, onJobQueued }: Props) 
         </div>
 
         {/* Google Drive destination */}
-        <div className="card flex-col gap-12" style={{ minHeight: 460 }}>
+        <div className="card flex-col gap-12" style={{ height: 460 }}>
           <div className="card-header">
             <div className="card-strip" />
             <span className="card-title">Destino (Shared Drive)</span>

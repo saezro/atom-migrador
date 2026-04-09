@@ -1,0 +1,75 @@
+
+> atom-migrador@1.0.2 predist
+> node scripts/download-rclone.mjs
+
+✓ rclone.exe ya existe en resources/extra/, omitiendo descarga.
+
+> atom-migrador@1.0.2 dist
+> npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --publish always
+
+
+> atom-migrador@1.0.2 build
+> electron-vite build
+
+[36mvite v5.4.21 [32mbuilding SSR bundle for production...[36m[39m
+transforming...
+[32m✓[39m 3 modules transformed.
+rendering chunks...
+[2mout/main/[22m[36mindex.js  [39m[1m[2m30.37 kB[22m[1m[22m
+[32m✓ built in 102ms[39m
+[36mvite v5.4.21 [32mbuilding SSR bundle for production...[36m[39m
+transforming...
+[32m✓[39m 1 modules transformed.
+rendering chunks...
+[2mout/preload/[22m[36mindex.js  [39m[1m[2m2.66 kB[22m[1m[22m
+[32m✓ built in 7ms[39m
+[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+transforming...
+[32m✓[39m 39 modules transformed.
+rendering chunks...
+[2mout/renderer/[22m[32mindex.html                 [39m[1m[2m  0.41 kB[22m[1m[22m
+[2mout/renderer/[22m[35massets/index-DIIntf7v.css  [39m[1m[2m  9.08 kB[22m[1m[22m
+[2mout/renderer/[22m[36massets/index-CNonjkdX.js   [39m[1m[2m276.24 kB[22m[1m[22m
+[32m✓ built in 374ms[39m
+  • electron-builder  version=24.13.3 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • packaging       platform=win32 arch=x64 electron=31.7.7 appOutDir=dist\win-unpacked
+  • building        target=nsis file=dist\Atom Migrador Setup 1.0.2.exe archs=x64 oneClick=false perMachine=false
+  • building block map  blockMapFile=dist\Atom Migrador Setup 1.0.2.exe.blockmap
+  ⨯ Cannot cleanup: 
+
+Error #1 --------------------------------------------------------------------------------
+Error: GitHub Personal Access Token is not set, neither programmatically, nor using env "GH_TOKEN"
+    at new GitHubPublisher (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\electron-publish\src\gitHubPublisher.ts:52:15)
+    at createPublisher (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\app-builder-lib\src\publish\PublishManager.ts:303:14)
+    at PublishManager.getOrCreatePublisher (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\app-builder-lib\src\publish\PublishManager.ts:222:19)
+    at PublishManager.scheduleUpload (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\app-builder-lib\src\publish\PublishManager.ts:152:28)
+    at PublishManager.artifactCreatedWithoutExplicitPublishConfig (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\app-builder-lib\src\publish\PublishManager.ts:202:14)
+
+Error #2 --------------------------------------------------------------------------------
+Error: GitHub Personal Access Token is not set, neither programmatically, nor using env "GH_TOKEN"
+    at new GitHubPublisher (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\electron-publish\src\gitHubPublisher.ts:52:15)
+    at createPublisher (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\app-builder-lib\src\publish\PublishManager.ts:303:14)
+    at PublishManager.getOrCreatePublisher (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\app-builder-lib\src\publish\PublishManager.ts:222:19)
+    at PublishManager.scheduleUpload (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\app-builder-lib\src\publish\PublishManager.ts:152:28)
+    at PublishManager.artifactCreatedWithoutExplicitPublishConfig (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\app-builder-lib\src\publish\PublishManager.ts:202:14)  failedTask=build stackTrace=Error: Cannot cleanup: 
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          Error #1 --------------------------------------------------------------------------------
+Error: GitHub Personal Access Token is not set, neither programmatically, nor using env "GH_TOKEN"
+    at new GitHubPublisher (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\electron-publish\src\gitHubPublisher.ts:52:15)
+    at createPublisher (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\app-builder-lib\src\publish\PublishManager.ts:303:14)
+    at PublishManager.getOrCreatePublisher (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\app-builder-lib\src\publish\PublishManager.ts:222:19)
+    at PublishManager.scheduleUpload (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\app-builder-lib\src\publish\PublishManager.ts:152:28)
+    at PublishManager.artifactCreatedWithoutExplicitPublishConfig (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\app-builder-lib\src\publish\PublishManager.ts:202:14)
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          Error #2 --------------------------------------------------------------------------------
+Error: GitHub Personal Access Token is not set, neither programmatically, nor using env "GH_TOKEN"
+    at new GitHubPublisher (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\electron-publish\src\gitHubPublisher.ts:52:15)
+    at createPublisher (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\app-builder-lib\src\publish\PublishManager.ts:303:14)
+    at PublishManager.getOrCreatePublisher (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\app-builder-lib\src\publish\PublishManager.ts:222:19)
+    at PublishManager.scheduleUpload (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\app-builder-lib\src\publish\PublishManager.ts:152:28)
+    at PublishManager.artifactCreatedWithoutExplicitPublishConfig (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\app-builder-lib\src\publish\PublishManager.ts:202:14)
+    at throwError (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\builder-util\src\asyncTaskManager.ts:89:11)
+    at checkErrors (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\builder-util\src\asyncTaskManager.ts:53:9)
+    at AsyncTaskManager.awaitTasks (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\builder-util\src\asyncTaskManager.ts:58:5)
+    at PublishManager.awaitTasks (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\app-builder-lib\src\publish\PublishManager.ts:236:28)
+    at C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\app-builder-lib\src\index.ts:119:32
+    at executeFinally (C:\Users\Rodrigo\Documents\Proyectos\Migrador\app\node_modules\builder-util\src\promise.ts:23:9)
