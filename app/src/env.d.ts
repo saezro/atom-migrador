@@ -117,6 +117,7 @@ export interface ElectronAPI {
     openExternal: (url: string) => Promise<void>
   }
   updates: {
+    check: () => Promise<{ ok: boolean }>
     download: () => Promise<{ ok: boolean }>
     install: () => Promise<void>
   }

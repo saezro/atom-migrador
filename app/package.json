@@ -65,7 +65,7 @@
       "signingHashAlgorithms": [],
       "sign": null
     },
-    "compression": "normal",
+    "compression": "store",
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,

@@ -502,6 +502,10 @@ function setupAutoUpdater() {
     send('update:ready')
   })
 
+  autoUpdater.on('update-not-available', () => {
+    send('update:not-available')
+  })
+
   autoUpdater.on('error', () => { /* ignore silently */ })
 
   // Check after 3s so the window is ready
@@ -512,5 +516,10 @@ function setupAutoUpdater() {
 
 ipcMain.handle('updates:download', () => {
   autoUpdater.downloadUpdate().catch(() => { /* ignore */ })
+  return { ok: true }
+})
+
+ipcMain.handle('updates:check', () => {
+  autoUpdater.checkForUpdates().catch(() => { /* ignore */ })
   return { ok: true }
 })
