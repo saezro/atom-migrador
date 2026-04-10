@@ -259,12 +259,15 @@ body {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 10px 12px;
-  overflow-y: scroll;
+  overflow-y: auto;
+  overflow-x: hidden;
   font-family: var(--mono);
   font-size: 12px;
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-all;
+  flex: 1;
+  min-height: 0;
 }
 
 /* ─── App shell ──────────────────────────────────── */
