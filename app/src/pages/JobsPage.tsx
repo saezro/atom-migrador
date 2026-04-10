@@ -299,7 +299,7 @@ export default function JobsPage() {
         </div>
 
         {/* Detail / log */}
-        <div className="card flex-col gap-12" style={{ minHeight: 0 }}>
+        <div className="card flex-col gap-12" style={{ minHeight: 0, overflow: 'hidden' }}>
           <div className="card-header">
             <div className="card-strip" />
             <span className="card-title">{selected ? selected.name : 'Detalle'}</span>
