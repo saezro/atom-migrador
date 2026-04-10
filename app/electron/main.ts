@@ -419,10 +419,7 @@ ipcMain.handle('dropbox:team-ns', async (_, remoteName: string) => {
     if (!access) return { error: 'access_token vacío en config de rclone' }
 
     // Call Dropbox API: /users/get_current_account
-    // We only use this to verify the user IS on a team and to get the team name.
-    // For rclone browsing we always use the special string "team_space" instead of
-    // a numeric namespace ID — rclone's Dropbox backend handles "team_space" specially
-    // and shows the actual shared team content (not just member home folders).
+    // root_info.root_namespace_id = the numeric ID rclone needs for --dropbox-root-namespace
     return new Promise((resolve) => {
       const body = Buffer.from('null')
       const options: https.RequestOptions = {
@@ -447,12 +444,18 @@ ipcMain.handle('dropbox:team-ns', async (_, remoteName: string) => {
             }
             const teamName = parsed?.team?.name
             if (!teamName) {
-              // Not a Business/Team account — use personal namespace
+              // Personal Dropbox — browse without namespace flag
               resolve({ id: '', name: parsed?.name?.display_name ?? 'Personal' })
               return
             }
-            // Use the special "team_space" string so rclone shows team shared content
-            resolve({ id: 'team_space', name: teamName })
+            // For Business accounts, use root_namespace_id (numeric) so rclone
+            // passes the correct Dropbox-API-Path-Root header via --dropbox-root-namespace
+            const nsId = parsed?.root_info?.root_namespace_id
+            if (nsId) {
+              resolve({ id: String(nsId), name: teamName })
+            } else {
+              resolve({ error: `Sin root_namespace_id (root_info: ${JSON.stringify(parsed?.root_info)})` })
+            }
           } catch {
             resolve({ error: `Respuesta inválida: ${data.slice(0, 120)}` })
           }
