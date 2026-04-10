@@ -35,6 +35,7 @@ let mainWindow: BrowserWindow | null = null
 let rcPath = ''
 let authorizeProc: ReturnType<typeof spawn> | null = null
 let allowClose = false
+let downloadedInstallerPath = ''
 
 // Paths
 // Writable user data (persists across updates)
@@ -551,7 +552,38 @@ ipcMain.handle('shell:open-external', (_, url: string) => {
 
 ipcMain.handle('app:version', () => app.getVersion())
 ipcMain.handle('updates:install', () => {
-  autoUpdater.quitAndInstall(true, false)
+  if (!downloadedInstallerPath || !existsSync(downloadedInstallerPath)) {
+    // Fallback: NSIS silent, no auto-restart
+    allowClose = true
+    autoUpdater.quitAndInstall(true, false)
+    return
+  }
+
+  // Spawn NSIS installer silently (/S flag) as a fully detached process
+  const child = spawn(downloadedInstallerPath, ['/S'], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true
+  })
+  // Don't keep the Node event loop waiting for the child
+  child.unref()
+
+  let settled = false
+  const finish = () => {
+    if (settled) return
+    settled = true
+    send('update:installed')
+    // Give renderer time to show the completion screen, then quit cleanly
+    setTimeout(() => {
+      allowClose = true
+      app.quit()
+    }, 2500)
+  }
+
+  child.on('close', finish)
+  child.on('error', finish)
+  // Hard timeout: 5 minutes
+  setTimeout(finish, 5 * 60 * 1000)
 })
 
 // ─── Auto-updater ─────────────────────────────────────────────────────────────
@@ -567,7 +599,8 @@ function setupAutoUpdater() {
     send('update:progress', Math.round(progress.percent))
   })
 
-  autoUpdater.on('update-downloaded', () => {
+  autoUpdater.on('update-downloaded', (info) => {
+    downloadedInstallerPath = (info as { downloadedFile?: string }).downloadedFile ?? ''
     send('update:ready')
   })
 
