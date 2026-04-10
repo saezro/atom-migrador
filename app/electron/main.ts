@@ -401,26 +401,31 @@ ipcMain.handle('jobs:recent-logs', (_, jobId?: string) => getRecentLogs(jobId))
 
 // ─── IPC: Dropbox team namespace ─────────────────────────────────────────────
 ipcMain.handle('dropbox:team-ns', async (_, remoteName: string) => {
-  if (!rcPath) return null
+  if (!rcPath) return { error: 'rclone no disponible' }
   try {
     // Clear any previously invalid root_namespace value in rclone config
     spawnSync(rcPath, ['config', 'update', remoteName, 'root_namespace', ''], {
       encoding: 'utf8', timeout: 5000
     })
 
-    // Read token from rclone config
+    // Force rclone to refresh the OAuth token (rclone auto-refreshes expiring tokens
+    // and saves the new access_token back to the config file as a side effect)
+    spawnSync(rcPath, ['lsf', `${remoteName}:`, '--dirs-only', '--max-depth', '1'], {
+      encoding: 'utf8', timeout: 15000
+    })
+
+    // Read (now-refreshed) token from rclone config
     const cfg = spawnSync(rcPath, ['config', 'show', remoteName], {
       encoding: 'utf8', timeout: 5000
     }).stdout ?? ''
     const tokenMatch = cfg.match(/token\s*=\s*(\{[^\r\n]+\})/)
-    if (!tokenMatch) return null
+    if (!tokenMatch) return { error: 'Token no encontrado en config de rclone' }
     const tok = JSON.parse(tokenMatch[1])
     const access = tok.access_token
-    if (!access) return null
+    if (!access) return { error: 'access_token vacío en config de rclone' }
 
     // Call Dropbox API: /users/get_current_account
-    // root_info.root_namespace_id = the namespace to pass to --dropbox-root-namespace
-    // This is the team root for Business accounts (same approach as legacy PS5 script)
+    // root_info.root_namespace_id = the team namespace to pass as --dropbox-root-namespace
     return new Promise((resolve) => {
       const body = Buffer.from('null')
       const options: https.RequestOptions = {
@@ -439,24 +444,28 @@ ipcMain.handle('dropbox:team-ns', async (_, remoteName: string) => {
         res.on('end', () => {
           try {
             const parsed = JSON.parse(data)
+            if (parsed?.error_summary) {
+              resolve({ error: `Dropbox API: ${parsed.error_summary}` })
+              return
+            }
             const nsId = parsed?.root_info?.root_namespace_id
             const teamName = parsed?.team?.name ?? 'Equipo'
             if (nsId) {
               resolve({ id: String(nsId), name: teamName })
             } else {
-              resolve(null)
+              resolve({ error: `Sin namespace de equipo (root_info: ${JSON.stringify(parsed?.root_info)})` })
             }
           } catch {
-            resolve(null)
+            resolve({ error: `Respuesta inválida: ${data.slice(0, 120)}` })
           }
         })
       })
-      req.on('error', () => resolve(null))
+      req.on('error', (e: Error) => resolve({ error: `Red: ${e.message}` }))
       req.write(body)
       req.end()
     })
-  } catch {
-    return null
+  } catch (e: unknown) {
+    return { error: (e as Error)?.message ?? 'Error desconocido' }
   }
 })
 

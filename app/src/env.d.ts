@@ -106,7 +106,7 @@ export interface ElectronAPI {
     processNext: () => Promise<{ ok: boolean }>
   }
   dropbox: {
-    getTeamNs: (remote: string) => Promise<{ id: string; name: string } | null>
+    getTeamNs: (remote: string) => Promise<{ id: string; name: string } | { error: string } | null>
   }
   env: {
     load: () => Promise<{ RemoteDB: string; RemoteGD: string }>

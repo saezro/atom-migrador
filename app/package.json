@@ -1,6 +1,6 @@
 {
   "name": "atom-migrador",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Migrador Dropbox → Google Shared Drive | Aerotools-UAV",
   "author": {
     "name": "Aerotools-UAV",
@@ -61,6 +61,7 @@
           ]
         }
       ],
+      "artifactName": "Atom-Migrador-Setup-${version}.${ext}",
       "icon": "resources/icon.ico",
       "signingHashAlgorithms": [],
       "sign": null

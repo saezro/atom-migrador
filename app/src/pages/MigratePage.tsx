@@ -36,14 +36,15 @@ export default function MigratePage({ remoteDB, remoteGD, onJobQueued }: Props) 
   useEffect(() => {
     if (!remoteDB) return
     window.api.dropbox.getTeamNs(remoteDB).then(ns => {
-      if (ns?.id) {
+      if (ns && 'id' in ns) {
         setDbNSId(ns.id)
         setDbTeamName(ns.name || 'Equipo')
         setOrigKey(k => k + 1)
       } else {
-        setDbNSError('No se pudo obtener el espacio de equipo.')
+        const msg = ns && 'error' in ns ? ns.error : 'No se pudo obtener el espacio de equipo.'
+        setDbNSError(msg)
       }
-    }).catch(() => setDbNSError('Error al conectar con Dropbox.'))
+    }).catch((e: unknown) => setDbNSError(`Error: ${(e as Error)?.message ?? 'desconocido'}`))
   }, [remoteDB])
 
   // ── Add to queue
