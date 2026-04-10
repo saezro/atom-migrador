@@ -323,8 +323,10 @@ ipcMain.handle('rclone:list-folders', async (_, remote: string, path: string, ns
     const all = lines
       .filter(l => /^\s*-?\d/.test(l))
       .map(l => {
-        const parts = l.trim().split(/\s+/, 6)
-        return parts[5] ?? ''
+        // Format: "  -1 2000-01-01 01:00:00  -1 Folder Name With Spaces"
+        // Capture everything after the 4th whitespace-separated field as the name
+        const m = l.trim().match(/^-?\d+\s+\S+\s+\S+\s+-?\d+\s+(.+)$/)
+        return m ? m[1].trim() : ''
       })
       .filter(Boolean)
       .sort()
