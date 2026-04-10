@@ -308,11 +308,12 @@ ipcMain.handle('rclone:list-remotes', () => getRemotes())
 
 const FOLDER_LIMIT = 300
 
-ipcMain.handle('rclone:list-folders', async (_, remote: string, path: string, nsMode?: string, _nsId?: string, driveId?: string) => {
+ipcMain.handle('rclone:list-folders', async (_, remote: string, path: string, nsMode?: string, nsId?: string, driveId?: string) => {
   if (!rcPath) return { error: 'rclone no encontrado' }
-  // nsMode is kept for API compat but root_namespace is now set in rclone config at auth time
-  void nsMode
   const args = ['lsd', `${remote}:${path}`, '--max-depth', '1']
+  if (nsMode === 'team_space' && nsId) {
+    args.push('--dropbox-root-namespace', nsId)
+  }
   if (driveId) {
     args.push('--drive-team-drive', driveId)
   }
@@ -402,51 +403,58 @@ ipcMain.handle('jobs:recent-logs', (_, jobId?: string) => getRecentLogs(jobId))
 ipcMain.handle('dropbox:team-ns', async (_, remoteName: string) => {
   if (!rcPath) return null
   try {
-    // Ensure root_namespace=team_space is set (in case user had the remote already)
-    spawnSync(rcPath, ['config', 'update', remoteName, 'root_namespace', 'team_space'], {
-      encoding: 'utf8', timeout: 8000
+    // Clear any previously invalid root_namespace value in rclone config
+    spawnSync(rcPath, ['config', 'update', remoteName, 'root_namespace', ''], {
+      encoding: 'utf8', timeout: 5000
     })
-    // Try to list root to confirm it works and get team name from config
-    const lsd = spawnSync(rcPath, ['lsd', `${remoteName}:`, '--max-depth', '1'], {
-      encoding: 'utf8', timeout: 15000
-    })
-    if (lsd.stderr && lsd.stderr.includes('ERROR')) return null
-    // Get team name from the stored token in rclone config
+
+    // Read token from rclone config
     const cfg = spawnSync(rcPath, ['config', 'show', remoteName], {
       encoding: 'utf8', timeout: 5000
     }).stdout ?? ''
     const tokenMatch = cfg.match(/token\s*=\s*(\{[^\r\n]+\})/)
-    if (!tokenMatch) return { id: 'team_space', name: 'Equipo' }
-    try {
-      const tok = JSON.parse(tokenMatch[1])
-      const access = tok.access_token
-      if (!access) return { id: 'team_space', name: 'Equipo' }
-      return new Promise((resolve) => {
-        const body = Buffer.from('null')
-        const options: https.RequestOptions = {
-          hostname: 'api.dropboxapi.com',
-          path: '/2/users/get_current_account',
-          method: 'POST',
-          headers: { Authorization: `Bearer ${access}`, 'Content-Type': 'application/json', 'Content-Length': body.length }
+    if (!tokenMatch) return null
+    const tok = JSON.parse(tokenMatch[1])
+    const access = tok.access_token
+    if (!access) return null
+
+    // Call Dropbox API: /users/get_current_account
+    // root_info.root_namespace_id = the namespace to pass to --dropbox-root-namespace
+    // This is the team root for Business accounts (same approach as legacy PS5 script)
+    return new Promise((resolve) => {
+      const body = Buffer.from('null')
+      const options: https.RequestOptions = {
+        hostname: 'api.dropboxapi.com',
+        path: '/2/users/get_current_account',
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${access}`,
+          'Content-Type': 'application/json',
+          'Content-Length': body.length
         }
-        const req = https.request(options, (res) => {
-          let data = ''
-          res.on('data', (chunk: Buffer) => { data += chunk.toString() })
-          res.on('end', () => {
-            try {
-              const parsed = JSON.parse(data)
-              const teamName = parsed?.team?.name ?? 'Equipo'
-              resolve({ id: 'team_space', name: teamName })
-            } catch { resolve({ id: 'team_space', name: 'Equipo' }) }
-          })
+      }
+      const req = https.request(options, (res) => {
+        let data = ''
+        res.on('data', (chunk: Buffer) => { data += chunk.toString() })
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(data)
+            const nsId = parsed?.root_info?.root_namespace_id
+            const teamName = parsed?.team?.name ?? 'Equipo'
+            if (nsId) {
+              resolve({ id: String(nsId), name: teamName })
+            } else {
+              resolve(null)
+            }
+          } catch {
+            resolve(null)
+          }
         })
-        req.on('error', () => resolve({ id: 'team_space', name: 'Equipo' }))
-        req.write(body)
-        req.end()
       })
-    } catch {
-      return { id: 'team_space', name: 'Equipo' }
-    }
+      req.on('error', () => resolve(null))
+      req.write(body)
+      req.end()
+    })
   } catch {
     return null
   }

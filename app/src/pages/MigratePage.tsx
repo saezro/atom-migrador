@@ -119,6 +119,9 @@ export default function MigratePage({ remoteDB, remoteGD, onJobQueued }: Props) 
             {dbTeamName && (
               <span className="badge badge-ok" style={{ marginLeft: 8 }}>{dbTeamName}</span>
             )}
+            {dbNSId && (
+              <span className="badge badge-info" style={{ marginLeft: 4, fontSize: 10 }}>ns:{dbNSId}</span>
+            )}
             {dbNSError && (
               <span className="badge badge-err" style={{ marginLeft: 8 }}>{dbNSError}</span>
             )}
