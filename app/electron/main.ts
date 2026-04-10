@@ -310,10 +310,10 @@ const FOLDER_LIMIT = 300
 
 ipcMain.handle('rclone:list-folders', async (_, remote: string, path: string, nsMode?: string, nsId?: string, driveId?: string) => {
   if (!rcPath) return { error: 'rclone no encontrado' }
-  const args = ['lsd', `${remote}:${path}`, '--max-depth', '1']
-  if (nsMode === 'team_space' && nsId) {
-    args.push('--dropbox-root-namespace', nsId)
-  }
+  // For Dropbox Business, use a leading / so rclone shows the team root instead of personal folder
+  // See: https://rclone.org/dropbox/#dropbox-for-business
+  const remotePath = nsMode === 'team_space' ? `${remote}:/${path}` : `${remote}:${path}`
+  const args = ['lsd', remotePath, '--max-depth', '1']
   if (driveId) {
     args.push('--drive-team-drive', driveId)
   }
@@ -418,8 +418,7 @@ ipcMain.handle('dropbox:team-ns', async (_, remoteName: string) => {
     const access = tok.access_token
     if (!access) return { error: 'access_token vacío en config de rclone' }
 
-    // Call Dropbox API: /users/get_current_account
-    // root_info.root_namespace_id = the numeric ID rclone needs for --dropbox-root-namespace
+    // Call Dropbox API: /users/get_current_account to detect if this is a business account
     return new Promise((resolve) => {
       const body = Buffer.from('null')
       const options: https.RequestOptions = {
@@ -448,14 +447,11 @@ ipcMain.handle('dropbox:team-ns', async (_, remoteName: string) => {
               resolve({ id: '', name: parsed?.name?.display_name ?? 'Personal' })
               return
             }
-            // For Business accounts, use root_namespace_id (numeric) so rclone
-            // passes the correct Dropbox-API-Path-Root header via --dropbox-root-namespace
+            // For Business accounts: return team name so the badge shows.
+            // The id is passed back as a non-empty marker so FolderBrowser uses the
+            // leading-/ path (rclone docs: remote:/ shows all Team Folders).
             const nsId = parsed?.root_info?.root_namespace_id
-            if (nsId) {
-              resolve({ id: String(nsId), name: teamName })
-            } else {
-              resolve({ error: `Sin root_namespace_id (root_info: ${JSON.stringify(parsed?.root_info)})` })
-            }
+            resolve({ id: nsId ? String(nsId) : '1', name: teamName })
           } catch {
             resolve({ error: `Respuesta inválida: ${data.slice(0, 120)}` })
           }

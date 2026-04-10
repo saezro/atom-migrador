@@ -29,7 +29,9 @@ function ts(): string {
 
 function buildSyncArgs(j: Job): { args: string[]; orig: string; destFull: string } {
   const cfg = j.config
-  const orig = `${cfg.remoteDB}:${cfg.carpOrig}`
+  // For Dropbox Business, use leading / so rclone addresses the team root, not the personal folder
+  const origPath = cfg.dbNamespace === 'team_space' ? `/${cfg.carpOrig}` : cfg.carpOrig
+  const orig = `${cfg.remoteDB}:${origPath}`
   let dest = cfg.carpDest
   if (cfg.createSubfolder) {
     const srcName = cfg.carpOrig ? cfg.carpOrig.split('/').pop()! : cfg.remoteDB
@@ -57,9 +59,6 @@ function buildSyncArgs(j: Job): { args: string[]; orig: string; destFull: string
     '--stats', '3s', '--stats-one-line', '--use-mmap',
     '--log-level', 'INFO'
   ]
-  if (cfg.dbNamespace === 'team_space' && cfg.dbNamespaceId) {
-    args.push('--dropbox-root-namespace', cfg.dbNamespaceId)
-  }
   if (cfg.bandwidth && cfg.bandwidth !== '0') {
     args.push('--bwlimit', cfg.bandwidth)
   }
@@ -80,9 +79,6 @@ function buildCheckArgs(j: Job, orig: string, destFull: string): string[] {
     '--fast-list',
     '--checkers', String(cfg.transfers * 3)
   ]
-  if (cfg.dbNamespace === 'team_space' && cfg.dbNamespaceId) {
-    args.push('--dropbox-root-namespace', cfg.dbNamespaceId)
-  }
   return args
 }
 
