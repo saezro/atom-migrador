@@ -16,6 +16,7 @@ export default function MigratePage({ remoteDB, remoteGD, onJobQueued }: Props) 
   const [dbNSId, setDbNSId] = useState('')
   const [dbTeamName, setDbTeamName] = useState('')
   const [dbNSError, setDbNSError] = useState('')
+  const [dbNSReady, setDbNSReady] = useState(false)
   const [carpOrig, setCarpOrig] = useState<string | null>(null)
   const [origKey, setOrigKey] = useState(0)
 
@@ -38,13 +39,15 @@ export default function MigratePage({ remoteDB, remoteGD, onJobQueued }: Props) 
     window.api.dropbox.getTeamNs(remoteDB).then(ns => {
       if (ns && 'id' in ns) {
         setDbNSId(ns.id)
-        setDbTeamName(ns.name || 'Equipo')
+        setDbTeamName(ns.name || '')
+        setDbNSReady(true)
         setOrigKey(k => k + 1)
       } else {
         const msg = ns && 'error' in ns ? ns.error : 'No se pudo obtener el espacio de equipo.'
         setDbNSError(msg)
+        setDbNSReady(true)
       }
-    }).catch((e: unknown) => setDbNSError(`Error: ${(e as Error)?.message ?? 'desconocido'}`))
+    }).catch((e: unknown) => { setDbNSError(`Error: ${(e as Error)?.message ?? 'desconocido'}`); setDbNSReady(true) })
   }, [remoteDB])
 
   // ── Add to queue
@@ -120,22 +123,19 @@ export default function MigratePage({ remoteDB, remoteGD, onJobQueued }: Props) 
             {dbTeamName && (
               <span className="badge badge-ok" style={{ marginLeft: 8 }}>{dbTeamName}</span>
             )}
-            {dbNSId && (
-              <span className="badge badge-info" style={{ marginLeft: 4, fontSize: 10 }}>ns:{dbNSId}</span>
-            )}
             {dbNSError && (
               <span className="badge badge-err" style={{ marginLeft: 8 }}>{dbNSError}</span>
             )}
           </div>
 
           <div style={{ flex: 1, minHeight: 0 }}>
-            {dbNSId ? (
+            {dbNSReady ? (
               <FolderBrowser
                 key={`db-${origKey}`}
                 remote={remoteDB}
                 label="Usar esta carpeta"
-                nsMode="team_space"
-                nsId={dbNSId}
+                nsMode={dbNSId ? 'team_space' : undefined}
+                nsId={dbNSId || undefined}
                 onSelect={(p) => setCarpOrig(p)}
               />
             ) : (

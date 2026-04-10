@@ -408,13 +408,7 @@ ipcMain.handle('dropbox:team-ns', async (_, remoteName: string) => {
       encoding: 'utf8', timeout: 5000
     })
 
-    // Force rclone to refresh the OAuth token (rclone auto-refreshes expiring tokens
-    // and saves the new access_token back to the config file as a side effect)
-    spawnSync(rcPath, ['lsf', `${remoteName}:`, '--dirs-only', '--max-depth', '1'], {
-      encoding: 'utf8', timeout: 15000
-    })
-
-    // Read (now-refreshed) token from rclone config
+    // Read token from rclone config (do NOT call rclone lsf — it may open browser for reauth)
     const cfg = spawnSync(rcPath, ['config', 'show', remoteName], {
       encoding: 'utf8', timeout: 5000
     }).stdout ?? ''
@@ -425,7 +419,10 @@ ipcMain.handle('dropbox:team-ns', async (_, remoteName: string) => {
     if (!access) return { error: 'access_token vacío en config de rclone' }
 
     // Call Dropbox API: /users/get_current_account
-    // root_info.root_namespace_id = the team namespace to pass as --dropbox-root-namespace
+    // We only use this to verify the user IS on a team and to get the team name.
+    // For rclone browsing we always use the special string "team_space" instead of
+    // a numeric namespace ID — rclone's Dropbox backend handles "team_space" specially
+    // and shows the actual shared team content (not just member home folders).
     return new Promise((resolve) => {
       const body = Buffer.from('null')
       const options: https.RequestOptions = {
@@ -448,13 +445,14 @@ ipcMain.handle('dropbox:team-ns', async (_, remoteName: string) => {
               resolve({ error: `Dropbox API: ${parsed.error_summary}` })
               return
             }
-            const nsId = parsed?.root_info?.root_namespace_id
-            const teamName = parsed?.team?.name ?? 'Equipo'
-            if (nsId) {
-              resolve({ id: String(nsId), name: teamName })
-            } else {
-              resolve({ error: `Sin namespace de equipo (root_info: ${JSON.stringify(parsed?.root_info)})` })
+            const teamName = parsed?.team?.name
+            if (!teamName) {
+              // Not a Business/Team account — use personal namespace
+              resolve({ id: '', name: parsed?.name?.display_name ?? 'Personal' })
+              return
             }
+            // Use the special "team_space" string so rclone shows team shared content
+            resolve({ id: 'team_space', name: teamName })
           } catch {
             resolve({ error: `Respuesta inválida: ${data.slice(0, 120)}` })
           }
