@@ -62,8 +62,11 @@ export default function JobsPage() {
     ])
     setJobs(list)
     setQueue(st)
-    if (!selectedRef.current && st.currentJobId) {
+    // Always follow the running job in the log panel
+    if (st.currentJobId) {
       setSelectedId(st.currentJobId)
+    } else if (!selectedRef.current) {
+      // No job running and nothing selected: pick first
     }
   }, [])
 
@@ -90,7 +93,8 @@ export default function JobsPage() {
 
   // Load recent log when switching selection
   useEffect(() => {
-    if (!selectedId) { setLogLines([]); return }
+    setLogLines([])
+    if (!selectedId) return
     window.api.jobs.recentLogs(selectedId).then((entries) => {
       setLogLines(entries.map(e => ({ text: e.line })))
     }).catch(() => {})
