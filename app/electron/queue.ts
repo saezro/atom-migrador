@@ -43,7 +43,7 @@ function buildSyncArgs(j: Job): { args: string[]; orig: string; destFull: string
   const checkers = transfers * 3
 
   const args = [
-    'sync', orig, destFull,
+    'copy', orig, destFull,
     '--drive-team-drive', cfg.driveId,
     '--transfers', String(transfers),
     '--checkers', String(checkers),
