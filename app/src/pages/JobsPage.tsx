@@ -285,6 +285,18 @@ export default function JobsPage() {
                         disabled={queue.hasRunning}
                       >↻ Reintentar</button>
                     )}
+                    {(j.status === 'done' || j.status === 'error' || j.status === 'interrupted' || j.status === 'verify-failed' || j.status === 'stopped') && (
+                      <button
+                        className="btn btn-sm"
+                        title="Añadir de nuevo a la cola con la misma configuración"
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          const newJob = await window.api.jobs.add({ name: j.name, config: j.config })
+                          setSelectedId(newJob.id)
+                          refresh()
+                        }}
+                      >⟳ Repetir</button>
+                    )}
                     {j.id !== queue.currentJobId && (
                       <button
                         className="btn btn-sm btn-danger"
