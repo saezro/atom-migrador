@@ -311,49 +311,58 @@ const FOLDER_LIMIT = 300
 ipcMain.handle('rclone:list-folders', async (_, remote: string, path: string, nsMode?: string, nsId?: string, driveId?: string) => {
   if (!rcPath) return { error: 'rclone no encontrado' }
   // For Dropbox Business, use a leading / so rclone shows the team root instead of personal folder
-  // See: https://rclone.org/dropbox/#dropbox-for-business
   const remotePath = nsMode === 'team_space' ? `${remote}:/${path}` : `${remote}:${path}`
   const args = ['lsd', remotePath, '--max-depth', '1']
   if (driveId) {
     args.push('--drive-team-drive', driveId)
   }
-  try {
-    const r = spawnSync(rcPath, args, { encoding: 'utf8', timeout: 30000 })
-    const lines = (r.stdout ?? '').split('\n')
-    const all = lines
-      .filter(l => /^\s*-?\d/.test(l))
-      .map(l => {
-        // Format: "  -1 2000-01-01 01:00:00  -1 Folder Name With Spaces"
-        // Capture everything after the 4th whitespace-separated field as the name
-        const m = l.trim().match(/^-?\d+\s+\S+\s+\S+\s+-?\d+\s+(.+)$/)
-        return m ? m[1].trim() : ''
-      })
-      .filter(Boolean)
-      .sort()
-    const truncated = all.length > FOLDER_LIMIT
-    const folders = truncated ? all.slice(0, FOLDER_LIMIT) : all
-    if (r.stderr && r.stderr.includes('ERROR')) return { error: r.stderr }
-    return { folders, truncated, total: all.length }
-  } catch (e: unknown) {
-    return { error: String(e) }
-  }
+  return new Promise((resolve) => {
+    let stdout = ''
+    let stderr = ''
+    const proc = spawn(rcPath, args, { windowsHide: true })
+    proc.stdout?.on('data', (d: Buffer) => { stdout += d.toString() })
+    proc.stderr?.on('data', (d: Buffer) => { stderr += d.toString() })
+    const timer = setTimeout(() => { try { proc.kill() } catch { /* ignore */ }; resolve({ error: 'Timeout al cargar carpetas' }) }, 35000)
+    proc.on('close', () => {
+      clearTimeout(timer)
+      if (stderr.includes('ERROR')) { resolve({ error: stderr.slice(0, 300) }); return }
+      const all = stdout.split('\n')
+        .filter(l => /^\s*-?\d/.test(l))
+        .map(l => {
+          const m = l.trim().match(/^-?\d+\s+\S+\s+\S+\s+-?\d+\s+(.+)$/)
+          return m ? m[1].trim() : ''
+        })
+        .filter(Boolean)
+        .sort()
+      const truncated = all.length > FOLDER_LIMIT
+      const folders = truncated ? all.slice(0, FOLDER_LIMIT) : all
+      resolve({ folders, truncated, total: all.length })
+    })
+    proc.on('error', (e: Error) => { clearTimeout(timer); resolve({ error: e.message }) })
+  })
 })
 
 ipcMain.handle('rclone:list-drives', async (_, remote: string) => {
   if (!rcPath) return []
-  try {
-    const r = spawnSync(rcPath, ['backend', 'drives', `${remote}:`], {
-      encoding: 'utf8', timeout: 20000
+  return new Promise((resolve) => {
+    let stdout = ''
+    const proc = spawn(rcPath, ['backend', 'drives', `${remote}:`], { windowsHide: true })
+    proc.stdout?.on('data', (d: Buffer) => { stdout += d.toString() })
+    const timer = setTimeout(() => { try { proc.kill() } catch { /* ignore */ }; resolve([]) }, 25000)
+    proc.on('close', () => {
+      clearTimeout(timer)
+      try {
+        const json = stdout.trim()
+        if (json.startsWith('[')) {
+          const parsed = JSON.parse(json)
+          resolve(parsed.map((d: { id: string; name: string }) => ({ id: d.id, name: d.name || '(sin nombre)' })))
+          return
+        }
+      } catch { /* ignore */ }
+      resolve([])
     })
-    const json = (r.stdout ?? '').trim()
-    if (json.startsWith('[')) {
-      const parsed = JSON.parse(json)
-      return parsed.map((d: { id: string; name: string }) => ({ id: d.id, name: d.name || '(sin nombre)' }))
-    }
-    return []
-  } catch {
-    return []
-  }
+    proc.on('error', () => { clearTimeout(timer); resolve([]) })
+  })
 })
 
 // ─── IPC: Jobs / Queue ───────────────────────────────────────────────────────

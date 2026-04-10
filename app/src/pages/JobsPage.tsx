@@ -342,7 +342,7 @@ export default function JobsPage() {
                 <button className="btn btn-sm" onClick={openLogFolder}>📂 Abrir log</button>
               </div>
 
-              <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                 <span className="section-label">LOG (en vivo + reciente)</span>
                 <LogViewer lines={logLines} height="100%" />
               </div>
