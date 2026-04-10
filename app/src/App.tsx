@@ -15,9 +15,12 @@ export default function App() {
   const [remoteDB, setRemoteDB] = useState('dropbox')
   const [remoteGD, setRemoteGD] = useState('gdrive')
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
+  const [rcloneReady, setRcloneReady] = useState(false)
 
   useEffect(() => {
-    window.api.rclone.check().catch(() => {})
+    window.api.rclone.check().then(r => {
+      if (r?.found) setRcloneReady(true)
+    }).catch(() => {})
 
     const onAvailable = (info: unknown) => {
       const u = info as UpdateInfo
@@ -63,6 +66,7 @@ export default function App() {
           <MigratePage
             remoteDB={remoteDB}
             remoteGD={remoteGD}
+            rcloneReady={rcloneReady}
             onJobQueued={() => setTab('Cola')}
           />
         </div>

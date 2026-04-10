@@ -542,7 +542,7 @@ ipcMain.handle('shell:open-external', (_, url: string) => {
 
 ipcMain.handle('app:version', () => app.getVersion())
 ipcMain.handle('updates:install', () => {
-  autoUpdater.quitAndInstall(true, true)
+  autoUpdater.quitAndInstall(true, false)
 })
 
 // ─── Auto-updater ─────────────────────────────────────────────────────────────

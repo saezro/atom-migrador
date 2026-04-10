@@ -6,10 +6,11 @@ import type { DriveItem, SyncConfig } from '../env.d'
 interface Props {
   remoteDB: string
   remoteGD: string
+  rcloneReady?: boolean
   onJobQueued?: () => void
 }
 
-export default function MigratePage({ remoteDB, remoteGD, onJobQueued }: Props) {
+export default function MigratePage({ remoteDB, remoteGD, rcloneReady, onJobQueued }: Props) {
   const [jobName, setJobName] = useState('')
 
   // ── Dropbox — always team_space, load NS on mount
@@ -32,9 +33,9 @@ export default function MigratePage({ remoteDB, remoteGD, onJobQueued }: Props) 
 
   const [lastQueued, setLastQueued] = useState<string>('')
 
-  // Auto-load team namespace on mount
+  // Auto-load team namespace — wait for rclone to be detected first
   useEffect(() => {
-    if (!remoteDB) return
+    if (!remoteDB || !rcloneReady) return
     window.api.dropbox.getTeamNs(remoteDB).then(ns => {
       if (ns && 'id' in ns) {
         setDbNSId(ns.id)
@@ -47,7 +48,7 @@ export default function MigratePage({ remoteDB, remoteGD, onJobQueued }: Props) 
         setDbNSReady(true)
       }
     }).catch((e: unknown) => { setDbNSError(`Error: ${(e as Error)?.message ?? 'desconocido'}`); setDbNSReady(true) })
-  }, [remoteDB])
+  }, [remoteDB, rcloneReady])
 
   // ── Add to queue
   async function queueJob() {
