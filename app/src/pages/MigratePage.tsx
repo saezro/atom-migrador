@@ -26,8 +26,7 @@ export default function MigratePage({ remoteDB, remoteGD, onJobQueued }: Props) 
   const [driveKey, setDriveKey] = useState(0)
 
   // ── Options
-  const [dryRun, setDryRun] = useState(true)
-  const [createSubfolder, setCreateSubfolder] = useState(true)
+  const [createSubfolder, setCreateSubfolder] = useState(false)
   const [bandwidth, setBandwidth] = useState('0')
   const [transfers, setTransfers] = useState(32)
 
@@ -62,7 +61,7 @@ export default function MigratePage({ remoteDB, remoteGD, onJobQueued }: Props) 
       carpDest: carpDest ?? '',
       driveId: selectedDrive.id,
       driveName: selectedDrive.name,
-      dryRun,
+      dryRun: false,
       createSubfolder,
       bandwidth,
       transfers,
@@ -93,9 +92,7 @@ export default function MigratePage({ remoteDB, remoteGD, onJobQueued }: Props) 
         : 'MODO: el contenido del origen se vuelca DIRECTAMENTE en el destino.',
       '',
       `Transferencias: ${transfers}   |   Banda: ${bandwidth === '0' ? 'libre' : bandwidth}`,
-      dryRun
-        ? '\n⚠ SIMULACIÓN: no se moverá nada (no se ejecuta verificación).'
-        : '\n✔ Tras copiar, se ejecutará rclone check (--size-only) para verificar.',
+      '\n✔ Tras copiar, se ejecutará rclone check (--size-only) para verificar.',
       '',
       'El trabajo se ejecutará automáticamente cuando le toque el turno.'
     ].join('\n')
@@ -176,14 +173,13 @@ export default function MigratePage({ remoteDB, remoteGD, onJobQueued }: Props) 
 
       {/* ── Options ── */}
       <div className="card">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', gap: 16, alignItems: 'center' }}>
-          <label className="checkbox-label">
-            <input type="checkbox" checked={dryRun} onChange={e => setDryRun(e.target.checked)} />
-            <span className="text-amber">Simulación (dry-run) — no mueve nada</span>
-          </label>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 16, alignItems: 'center' }}>
           <label className="checkbox-label">
             <input type="checkbox" checked={createSubfolder} onChange={e => setCreateSubfolder(e.target.checked)} />
-            <span>Crear subcarpeta con el nombre del origen</span>
+            <span>{createSubfolder
+              ? 'Crear subcarpeta automática en el destino (destino/NombreOrigen/)'
+              : 'Volcar directamente en el destino (sin crear subcarpeta)'
+            }</span>
           </label>
           <div className="flex items-center gap-8">
             <span className="text-muted" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>Banda:</span>
