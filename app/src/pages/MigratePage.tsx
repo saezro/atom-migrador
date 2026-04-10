@@ -136,6 +136,7 @@ export default function MigratePage({ remoteDB, remoteGD, onJobQueued }: Props) 
                 label="Usar esta carpeta"
                 nsMode={dbNSId ? 'team_space' : undefined}
                 nsId={dbNSId || undefined}
+                rootPath={dbTeamName || undefined}
                 onSelect={(p) => setCarpOrig(p)}
               />
             ) : (

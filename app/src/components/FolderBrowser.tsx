@@ -6,11 +6,12 @@ interface Props {
   nsMode?: 'private' | 'team_space'
   nsId?: string
   driveId?: string
+  rootPath?: string   // start here and don't allow navigating above
   onSelect: (path: string) => void
 }
 
-export default function FolderBrowser({ remote, label, nsMode, nsId, driveId, onSelect }: Props) {
-  const [path, setPath] = useState('')
+export default function FolderBrowser({ remote, label, nsMode, nsId, driveId, rootPath, onSelect }: Props) {
+  const [path, setPath] = useState(rootPath ?? '')
   const [stack, setStack] = useState<string[]>([])
   const [items, setItems] = useState<string[]>([])
   const [selected, setSelected] = useState<string>('')
@@ -34,12 +35,13 @@ export default function FolderBrowser({ remote, label, nsMode, nsId, driveId, on
 
   useEffect(() => {
     if (remote) {
-      setPath('')
+      const start = rootPath ?? ''
+      setPath(start)
       setStack([])
       setConfirmed(null)
-      load('')
+      load(start)
     }
-  }, [remote, nsMode, nsId, driveId, load])
+  }, [remote, nsMode, nsId, driveId, rootPath, load])
 
   function enter() {
     if (!selected) return
@@ -52,6 +54,8 @@ export default function FolderBrowser({ remote, label, nsMode, nsId, driveId, on
   function goUp() {
     if (stack.length === 0) return
     const prev = stack[stack.length - 1]
+    // Don't go above rootPath
+    if (rootPath && prev === '' && rootPath !== '') return
     setStack(s => s.slice(0, -1))
     setPath(prev)
     load(prev)
@@ -103,7 +107,7 @@ export default function FolderBrowser({ remote, label, nsMode, nsId, driveId, on
 
       {/* Controls */}
       <div className="flex gap-8" style={{ flexWrap: 'wrap' }}>
-        <button className="btn btn-sm" onClick={goUp} disabled={stack.length === 0 || loading}>
+        <button className="btn btn-sm" onClick={goUp} disabled={stack.length === 0 || loading || (rootPath !== undefined && path === rootPath)}>
           ↑ Subir
         </button>
         <button className="btn btn-sm" onClick={enter} disabled={!selected || loading}>
