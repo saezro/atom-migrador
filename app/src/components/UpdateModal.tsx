@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-type Phase = 'available' | 'downloading' | 'ready' | 'error'
+type Phase = 'available' | 'downloading' | 'ready' | 'restarting' | 'error'
 
 interface Props {
   version: string
@@ -37,7 +37,8 @@ export default function UpdateModal({ version, currentVersion, onDismiss }: Prop
       setErrorMsg('')
       await window.api.updates.download()
     } else if (phase === 'ready') {
-      window.api.updates.install()
+      setPhase('restarting')
+      setTimeout(() => window.api.updates.install(), 1200)
     }
   }
 
@@ -94,18 +95,33 @@ export default function UpdateModal({ version, currentVersion, onDismiss }: Prop
           </div>
         )}
 
+        {phase === 'restarting' && (
+          <div className="flex-col gap-8">
+            <div className="badge badge-ok" style={{ alignSelf: 'flex-start' }}>
+              ✓ Aplicando actualización…
+            </div>
+            <div className="text-muted" style={{ fontSize: 12 }}>
+              La aplicación se cerrará y se reiniciará automáticamente con la nueva versión.
+            </div>
+            <div className="progress-track progress-indeterminate">
+              <div className="progress-fill" />
+            </div>
+          </div>
+        )}
+
         <div className="flex gap-12">
           <button
             className="btn btn-primary"
             onClick={install}
-            disabled={phase === 'downloading'}
+            disabled={phase === 'downloading' || phase === 'restarting'}
           >
             {phase === 'available'   && 'Instalar'}
             {phase === 'downloading' && '⟳ Descargando…'}
             {phase === 'ready'       && '↻ Reiniciar e instalar'}
+            {phase === 'restarting'  && '⟳ Reiniciando…'}
             {phase === 'error'       && '↺ Reintentar'}
           </button>
-          {phase !== 'downloading' && (
+          {phase !== 'downloading' && phase !== 'restarting' && (
             <button className="btn" onClick={onDismiss}>
               Más tarde
             </button>

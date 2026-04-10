@@ -451,11 +451,6 @@ ipcMain.handle('dropbox:check-connection', async (_, remoteName: string) => {
 ipcMain.handle('dropbox:team-ns', async (_, remoteName: string) => {
   if (!rcPath) return { error: 'rclone no disponible' }
   try {
-    // Clear any previously invalid root_namespace value in rclone config
-    spawnSync(rcPath, ['config', 'update', remoteName, 'root_namespace', ''], {
-      encoding: 'utf8', timeout: 5000
-    })
-
     // Read token from rclone config (do NOT call rclone lsf — it may open browser for reauth)
     const cfg = spawnSync(rcPath, ['config', 'show', remoteName], {
       encoding: 'utf8', timeout: 5000

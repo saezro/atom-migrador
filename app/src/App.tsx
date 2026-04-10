@@ -50,7 +50,7 @@ export default function App() {
       </nav>
 
       <div className="page-content" style={{ overflow: 'auto' }}>
-        {tab === 'Cuentas' && (
+        <div style={{ display: tab === 'Cuentas' ? '' : 'none' }}>
           <AccountsPage
             remoteDB={remoteDB}
             remoteGD={remoteGD}
@@ -58,15 +58,17 @@ export default function App() {
             onRemoteGDChange={setRemoteGD}
             onReady={() => setTab('Migrar')}
           />
-        )}
-        {tab === 'Migrar' && (
+        </div>
+        <div style={{ display: tab === 'Migrar' ? '' : 'none', height: '100%' }}>
           <MigratePage
             remoteDB={remoteDB}
             remoteGD={remoteGD}
             onJobQueued={() => setTab('Cola')}
           />
-        )}
-        {tab === 'Cola' && <JobsPage />}
+        </div>
+        <div style={{ display: tab === 'Cola' ? '' : 'none' }}>
+          <JobsPage />
+        </div>
       </div>
     </div>
   )
