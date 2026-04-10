@@ -200,9 +200,12 @@ export function runJob(jobId: string): { ok: boolean; error?: string } {
   const handleOutput = (data: Buffer): void => {
     const lines = data.toString('utf8').split(/\r?\n/).filter(l => l.trim())
     for (const line of lines) {
-      ctx?.send('migration:log', line)
+      // Always write to file log
       appendLog(line, jobId)
       try { appendFileSync(logPath, line + '\n') } catch { /* ignore */ }
+      // Filter noisy lines from live UI: directory modtime updates are normal rclone behaviour
+      if (/Set directory modification time/i.test(line)) continue
+      ctx?.send('migration:log', line)
       const s = parseStats(line)
       if (Object.keys(s).length > 0) {
         const cur = (updateJob(jobId, {})?.stats) ?? { files: '', speed: '', eta: '', progress: '', errors: '0' }
@@ -297,9 +300,12 @@ function runVerification(
     output += text
     const lines = text.split(/\r?\n/).filter(l => l.trim())
     for (const line of lines) {
-      ctx?.send('migration:log', line)
+      // Always write to file log
       appendLog(line, jobId)
       try { appendFileSync(logPath, line + '\n') } catch { /* ignore */ }
+      // Filter misleading "No common hash" — check still works with --size-only
+      if (/No common hash found/i.test(line)) continue
+      ctx?.send('migration:log', line)
     }
   }
   currentVerifyProc.stdout?.on('data', handle)
