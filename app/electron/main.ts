@@ -502,7 +502,7 @@ ipcMain.handle('shell:open-external', (_, url: string) => {
 
 ipcMain.handle('app:version', () => app.getVersion())
 ipcMain.handle('updates:install', () => {
-  autoUpdater.quitAndInstall(false, true)
+  autoUpdater.quitAndInstall(true, true)
 })
 
 // ─── Auto-updater ─────────────────────────────────────────────────────────────
