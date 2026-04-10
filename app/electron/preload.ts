@@ -33,7 +33,8 @@ contextBridge.exposeInMainWorld('api', {
     processNext: () => ipcRenderer.invoke('queue:process-next')
   },
   dropbox: {
-    getTeamNs: (remote: string) => ipcRenderer.invoke('dropbox:team-ns', remote)
+    getTeamNs: (remote: string) => ipcRenderer.invoke('dropbox:team-ns', remote),
+    checkConnection: (remote: string) => ipcRenderer.invoke('dropbox:check-connection', remote)
   },
   env: {
     load: () => ipcRenderer.invoke('env:load'),

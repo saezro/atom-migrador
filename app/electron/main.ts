@@ -401,6 +401,52 @@ ipcMain.handle('queue:process-next', () => {
 })
 ipcMain.handle('jobs:recent-logs', (_, jobId?: string) => getRecentLogs(jobId))
 
+// ─── IPC: Dropbox check existing connection ───────────────────────────────────
+ipcMain.handle('dropbox:check-connection', async (_, remoteName: string) => {
+  if (!rcPath) return { ok: false }
+  try {
+    const cfg = spawnSync(rcPath, ['config', 'show', remoteName], {
+      encoding: 'utf8', timeout: 5000
+    }).stdout ?? ''
+    const tokenMatch = cfg.match(/token\s*=\s*(\{[^\r\n]+\})/)
+    if (!tokenMatch) return { ok: false }
+    const tok = JSON.parse(tokenMatch[1])
+    const access = tok.access_token
+    if (!access) return { ok: false }
+
+    return new Promise<{ ok: boolean }>((resolve) => {
+      const body = Buffer.from('null')
+      const req = https.request({
+        hostname: 'api.dropboxapi.com',
+        path: '/2/users/get_current_account',
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${access}`,
+          'Content-Type': 'application/json',
+          'Content-Length': body.length
+        }
+      }, (res) => {
+        let data = ''
+        res.on('data', (chunk: Buffer) => { data += chunk.toString() })
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(data)
+            resolve({ ok: !parsed?.error_summary })
+          } catch {
+            resolve({ ok: false })
+          }
+        })
+      })
+      req.on('error', () => resolve({ ok: false }))
+      req.setTimeout(8000, () => { req.destroy(); resolve({ ok: false }) })
+      req.write(body)
+      req.end()
+    })
+  } catch {
+    return { ok: false }
+  }
+})
+
 // ─── IPC: Dropbox team namespace ─────────────────────────────────────────────
 ipcMain.handle('dropbox:team-ns', async (_, remoteName: string) => {
   if (!rcPath) return { error: 'rclone no disponible' }

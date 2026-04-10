@@ -49,7 +49,7 @@ function AccountCard({
       </div>
 
       <p className="text-muted" style={{ fontSize: 12, marginBottom: 4 }}>
-        Pulsa el botón para abrir el navegador. Inicia sesión y acepta los permisos.
+        Pulsa el botón para verificar la conexión. Si el token ha expirado, se abrirá el navegador para renovarlo.
       </p>
       <p className="text-muted" style={{ fontSize: 12, marginBottom: 12 }}>
         El token se guardará automáticamente sin que tengas que copiar nada.
@@ -116,6 +116,13 @@ export default function AccountsPage({
     setDbMsg('')
     const name = remoteDB.trim() || 'dropbox'
     onRemoteDBChange(name)
+    // Check if current token is still valid — only open browser if it isn't
+    const check = await window.api.dropbox.checkConnection(name)
+    if (check.ok) {
+      setDbStatus('ok')
+      window.api.env.save({ RemoteDB: name, RemoteGD: remoteGD })
+      return
+    }
     const result = await window.api.rclone.authorize('dropbox', name)
     if (result.ok) {
       setDbStatus('ok')
